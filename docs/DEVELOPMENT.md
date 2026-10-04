@@ -1,7 +1,7 @@
 # Development Log
 
 ## Current phase
-Phase 4 complete (seed data, verified). Starting Phase 5 (repository/data-access layer).
+Phase 5 complete (repository/data-access layer, verified). Starting Phase 6 (business services).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -26,12 +26,25 @@ Phase 4 complete (seed data, verified). Starting Phase 5 (repository/data-access
   deliberately `is_available: false` to exercise that path later). Idempotent — re-ran it twice
   against the dev database and row counts were identical both times.
 
+- Phase 5: repository layer — `errors/AppError.js` (typed app error + notFound/validationError/
+  forbidden/unauthorized/conflict factories) and 9 repository modules (restaurants, users,
+  restaurant_users, tables, menu, customers, reservations, orders, conversation
+  sessions/messages, ai_actions, audit_logs). Every tenant-owned lookup takes `restaurantId`
+  explicitly and scopes the query by it — no bare-id lookups. `tableRepository.lockByIds` +
+  `reservationRepository.findOverlappingTableIds` are the two primitives Phase 7/8's allocation
+  service will compose into the actual locking transaction; the repository layer itself has no
+  allocation logic, just the query primitives. Verified with an ad hoc smoke-test script (not
+  committed — Phase 15 builds the real Jest suite) run against the seeded dev database: 18
+  assertions covering tenant-scoped reads, idempotent `findOrCreate`, the `FOR UPDATE` lock +
+  overlap check actually catching a just-created reservation, server-side order pricing, and
+  session-state merge-patching — all passed.
+
 ## Current task
-Phase 5: repository/data-access layer (the only code allowed to touch `pg` directly, per
-`ARCHITECTURE.md`'s layering) — restaurants, tables, menu, customers, reservations, orders.
+Phase 6: business services built on top of the repositories (pricing, state-transition rules,
+and the table-allocation algorithm itself — exact fit → smallest suitable → allowed combination).
 
 ## Next task
-Phase 6: business services built on top of the repositories (pricing, state-transition rules).
+Phase 7: the reservation engine (create/modify/cancel) wired through those services.
 
 ## Known issues
 - `reservation_tables` combination-seating (`allow_table_combination`) is schema-ready but the
