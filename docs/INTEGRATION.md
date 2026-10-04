@@ -1,0 +1,56 @@
+# Integration Guide (for the voice/dashboard partner)
+
+This is the contract you build against. You don't need to know the database schema — everything
+you need is the tool/API shapes below and in `AI_TOOLS.md` / `API.md`.
+
+## Voice AI → backend
+
+```
+Caller dials restaurant's number
+  → your telephony layer identifies which restaurant that number belongs to
+  → POST /api/v1/sessions { restaurantId, customerPhone }
+      → backend returns { sessionId, aiToken, state: {} }
+  → your orchestration loop runs: STT → LLM decides intent/tool → call the matching
+    /api/v1/ai/tools/* endpoint with Authorization: Bearer <aiToken>
+  → backend returns a structured JSON result (never prose) — your LLM turns that into speech via TTS
+  → as slots get filled (date, time, partySize, name, ...), PATCH /api/v1/sessions/:id with the
+    new fields so you don't have to carry state yourself between turns
+  → POST /api/v1/sessions/:id/messages to log each turn's transcript (optional but recommended —
+    powers the dashboard's "AI activity" view via ai_actions + conversation_messages)
+  → on call end: the session is just left to expire (or you can mark it ended if you have a clean
+    hangup signal) — no explicit "close" call is required
+```
+
+## Hard rule your orchestrator must follow
+
+**Never tell the customer an action succeeded (booked / cancelled / ordered) unless the
+corresponding tool call returned `success: true`.** Every mutating tool
+(`create_reservation`, `modify_reservation`, `cancel_reservation`, `create_order`, `modify_order`,
+`cancel_order`) returns `success: false` with a structured error and (where relevant) alternatives
+on failure — that's your signal to keep the conversation going instead of confirming.
+
+## Idempotency — you must send this
+
+For `create_reservation` and `create_order`, generate a UUID once per logical attempt and send it
+as the `idempotencyKey` field (also usable as the `Idempotency-Key` HTTP header on the equivalent
+plain REST endpoint). If your telephony layer retries a dropped request, resend the **same** key —
+the backend returns the original result instead of creating a duplicate booking/order. Generate a
+**new** key only when the customer is making an actually new request.
+
+## Function-calling schemas
+
+If your LLM provider wants OpenAI-style function-calling JSON Schemas rather than hand-rolled
+prompt instructions, pull them from `src/tools/schemas.js` (added in Phase 12) — these are kept in
+sync with the actual endpoint validators, so they can't drift out of date with what the backend
+will actually accept.
+
+## Dashboard → backend
+
+Standard JWT-bearer REST API (`POST /auth/login`, then `Authorization: Bearer <token>` on
+everything else). Staff only see/modify their own restaurant's data — enforced server-side, not by
+what your UI chooses to display. See `API.md` for the full endpoint list.
+
+## Errors
+
+Every error response has the same envelope regardless of which endpoint — see `ERROR_HANDLING.md`.
+Branch on `response.success`, not just HTTP status, though status codes are also meaningful.
