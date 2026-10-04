@@ -64,7 +64,7 @@ The AI is never allowed to say "confirmed" before the `create_reservation` respo
 `success: true` — this is enforced by what the tool *returns*, not by an AI prompt instruction the
 backend has no way to verify. If `create_reservation` instead returns
 `RESERVATION_UNAVAILABLE` (the slot was taken in the few seconds between the check and the
-booking — the exclusion constraint caught a race), the AI must go back to offering alternatives,
+booking — the row-locking check caught a race), the AI must go back to offering alternatives,
 not claim success.
 
 ## Nepali / code-switched input

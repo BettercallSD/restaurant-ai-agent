@@ -46,7 +46,7 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 - [ ] Invalid AI tool arguments (wrong types, missing required fields) → `VALIDATION_ERROR`, no
       service/repository code reached
 - [ ] Concurrent reservation attempt for the same table/slot → exactly one succeeds, the other
-      gets `RESERVATION_UNAVAILABLE` (exercises the exclusion constraint directly, not just the
+      gets `RESERVATION_UNAVAILABLE` (exercises the row-locking transaction directly, not just the
       application-level check)
 
 ## Commands

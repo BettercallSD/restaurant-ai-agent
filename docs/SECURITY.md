@@ -39,6 +39,20 @@ line is removed.
   cross-restaurant operations (none exposed to the AI or the dashboard in v1 — reserved for an
   internal ops endpoint if time allows).
 
+## Dependency audit (Phase 3 checkpoint)
+
+`npm audit --omit=dev` on the production dependency tree: **0 vulnerabilities** (verified by
+actually running it, not assumed — `bcrypt` was pinned to `^6.0.0` specifically because `5.x`
+pulled in a vulnerable transitive `tar`/`@mapbox/node-pre-gyp` chain used only at native-module
+install time).
+
+`npm audit` including devDependencies currently reports high-severity advisories against `braces`
+(a transitive dependency of `jest`'s file-watching/matching stack, a ReDoS on crafted glob
+patterns). This is dev-only test tooling — never part of the deployed server's dependency tree —
+and the available fix requires `jest@30`, a breaking major version bump. Accepted as a known,
+tracked v1 risk rather than destabilizing the test runner under hackathon time pressure; re-checked
+in the Phase 17 final audit before declaring the backend complete.
+
 ## Final audit (filled in at Phase 17)
 
 - [ ] No SQL string concatenation

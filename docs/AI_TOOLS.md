@@ -50,7 +50,7 @@ the args) → business logic via the matching service → structured, minimal ou
 - **Input**: `{ customerName, customerPhone, date, time, partySize, specialRequests?, idempotencyKey }`
 - **Validation**: full zod schema; phone format; date/time/partySize re-validated server-side
   (never trusts that the AI's earlier availability check is still true — re-checks and uses the
-  exclusion constraint as the final word, see `DATABASE.md`).
+  row-locking transaction as the final word, see `DATABASE.md`).
 - **Output (success)**: `{ success: true, reservationId, status: 'CONFIRMED', date, time, partySize }`
 - **Output (lost race / now unavailable)**: `{ success: false, error: { code: 'RESERVATION_UNAVAILABLE' }, alternatives: [...] }`
 - **This is the tool the "AI must never claim success without backend confirmation" rule is

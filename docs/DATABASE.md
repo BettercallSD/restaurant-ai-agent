@@ -105,9 +105,14 @@ authenticated by construction).
 | idempotency_key | text | |
 | unique(restaurant_id, idempotency_key) | | nullable key = no idempotency requested |
 
+No `table_id` column directly on `reservations` — table assignment (one table, or several when
+combined) is always recorded via `reservation_tables`, so single-table and combined bookings use
+the exact same allocation/locking code path (see "Preventing double-booking" below).
+
 ### `reservation_tables`
-Join table so a reservation can occupy one table (common case) or several (combination seating,
-only when `restaurants.allow_table_combination` is true).
+Join table recording which table(s) a reservation occupies — one row for the common single-table
+case, several rows when seating was combined (only when `restaurants.allow_table_combination` is
+true).
 | column | type | notes |
 |---|---|---|
 | reservation_id | uuid fk → reservations | |
@@ -193,22 +198,33 @@ which is specifically AI tool calls).
 
 Two calls racing to book the last table for the same slot must not both succeed. Checking
 availability then inserting in two separate steps is **not** safe — both requests can read
-"available" before either writes.
+"available" before either writes, since nothing stops a second transaction from reading the same
+"before" state while the first transaction's write is still in flight.
 
-`reservations.time_range` is a generated `tsrange` column, and the table carries:
+`reservations.time_range` is a generated `tsrange` column (`tsrange(reservation_date +
+reservation_time, reservation_date + reservation_time + duration_minutes * interval '1 minute')`),
+used for overlap checks (`&&`). Allocation runs inside a single transaction that:
 
-```sql
-EXCLUDE USING gist (table_id WITH =, time_range WITH &&)
-  WHERE (status IN ('PENDING', 'CONFIRMED'))
-```
+1. `SELECT id FROM tables WHERE id = ANY($candidateTableIds) FOR UPDATE` — takes a row lock on
+   every table being considered for this booking (one row for a single-table reservation, several
+   for a combined one). A second, concurrent transaction trying to allocate any of the *same*
+   table rows blocks here until the first transaction commits or rolls back — this is what
+   actually closes the race window, not the earlier read.
+2. While still holding those locks, re-check for any active (`PENDING`/`CONFIRMED`)
+   `reservation_tables` rows joined to `reservations` whose `time_range` overlaps the requested
+   slot, for those same table ids.
+3. If none overlap, insert the `reservations` row and its `reservation_tables` row(s), then
+   `COMMIT` (releasing the locks). If an overlap is found, `ROLLBACK` and report
+   `RESERVATION_UNAVAILABLE`.
 
-(via `reservation_tables` for the actual table reference, see migration for the exact join form).
-This is a PostgreSQL exclusion constraint: the database itself refuses a second overlapping,
-active reservation for the same table, regardless of what the application code checked
-beforehand. The application still does an availability check first (so it can return a friendly
-"unavailable, here are alternatives" response instead of a raw constraint violation), but the
-constraint is the actual safety net — see `ARCHITECTURE.md` and the Phase 8 implementation notes
-in `DECISIONS.md` for why this beats an application-level `SELECT ... FOR UPDATE` lock here.
+The initial availability check the AI/customer sees (`check_table_availability`) is a plain read
+with no lock — it's only there to give a fast, friendly answer and candidate table ids. The
+locking transaction above is what's actually safety-critical, and it's re-run in full on
+`create_reservation` regardless of what the earlier availability check said, because that check
+could be stale by the time the booking is attempted. One table-locking transaction handles both
+the single-table case and the allowed-combination case identically — see `DECISIONS.md` for why
+this was chosen over a declarative `EXCLUDE` constraint once combination seating needed a join
+table.
 
 ## Idempotency
 

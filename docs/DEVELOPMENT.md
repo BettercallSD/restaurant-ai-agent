@@ -1,36 +1,49 @@
 # Development Log
 
 ## Current phase
-Phase 2 complete (architecture + documentation). Starting Phase 3 (database schema + migrations).
+Phase 3 complete (database schema + migrations, verified against a real local Postgres). Starting
+Phase 4 (seed data).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
 - Phase 2: Architecture decided (Node/Express/plain-JS, raw `pg` + parameterized SQL, no ORM,
   zod validation, JWT staff auth, UUID PKs, cents-based pricing, idempotency keys, Postgres
-  exclusion constraint for double-booking). Full docs written: PROJECT_OVERVIEW, ARCHITECTURE,
-  DATABASE, API (skeleton), AI_TOOLS, AGENT_FLOW, SECURITY (threat model), ERROR_HANDLING,
-  TESTING (strategy + checklist), DECISIONS, INTEGRATION, DEMO_SCENARIOS.
+  `SELECT ... FOR UPDATE` row-locking transaction for double-booking). Full docs written:
+  PROJECT_OVERVIEW, ARCHITECTURE, DATABASE, API (skeleton), AI_TOOLS, AGENT_FLOW, SECURITY
+  (threat model), ERROR_HANDLING, TESTING (strategy + checklist), DECISIONS, INTEGRATION,
+  DEMO_SCENARIOS.
+- Phase 3: `package.json`, `src/config/env.js` (fail-fast env validation via zod),
+  `src/db/pool.js` (shared `pg` pool, `query`/`withTransaction` helpers), and 7
+  `node-pg-migrate` migrations covering all 16 tables (the 14 from `DATABASE.md` plus
+  `reservation_tables` and `pgmigrations` itself). Verified for real: ran `up` against a local
+  Postgres 16, inspected the resulting schema (generated `time_range` column, constraints,
+  triggers all present as designed), ran `down` 7 and back `up` cleanly, applied to both the dev
+  and test databases. `npm audit --omit=dev` is clean (0 vulnerabilities) after pinning
+  `bcrypt@^6` — see `SECURITY.md`.
 
 ## Current task
-Phase 3: write `package.json`, `src/db/` connection pool, and `node-pg-migrate` migrations for
-all 14 tables in `DATABASE.md`, including the `tsrange` exclusion constraint on reservations.
-
-## Next task
 Phase 4: seed data for "Himalayan Bites" (one realistic Nepali restaurant — tables, menu,
 categories, opening hours) via a seed script, not hardcoded in source.
 
+## Next task
+Phase 5: repository/data-access layer (the only code allowed to touch `pg` directly, per
+`ARCHITECTURE.md`'s layering).
+
 ## Known issues
-None yet — no code written besides docs.
+- `reservation_tables` combination-seating (`allow_table_combination`) is schema-ready but the
+  allocation algorithm implementing it lands in Phase 7/8, not before.
+- Dev-dependency `braces` (via `jest`) has an open high-severity advisory; tracked in
+  `SECURITY.md`, not in the production dependency tree.
 
 ## Important decisions
 See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricing, Postgres
-exclusion constraint (not just app-level locking) for double-booking, idempotency via
+`SELECT ... FOR UPDATE` row-locking transaction for double-booking, idempotency via
 `Idempotency-Key` + unique constraint, short-lived JWT with no refresh rotation (v1 scope).
 
 ## Definition of Done tracking
 - [x] Architecture + docs
-- [ ] Database can be created from scratch
-- [ ] Migrations work
+- [x] Database can be created from scratch
+- [x] Migrations work (verified up/down/up against a real Postgres instance)
 - [ ] Seed data works
 - [ ] Backend starts successfully
 - [ ] REST API works

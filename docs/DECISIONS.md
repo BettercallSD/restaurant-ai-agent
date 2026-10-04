@@ -34,18 +34,31 @@ silently rewriting historical order totals. This is also the concrete enforcemen
 a client/AI-supplied price" — the order service reads the price itself and ignores any price field
 if one is even present in the request.
 
-## PostgreSQL exclusion constraint for double-booking, not just application-level locking
+## Row-level locking (`SELECT ... FOR UPDATE`) for double-booking, not a declarative exclusion constraint
 
-**Decision**: `EXCLUDE USING gist` on `(table_id, time_range)` for active reservations, in addition
-to (not instead of) an application-level availability check.
+**Decision**: reservation creation/modification runs inside a transaction that locks the specific
+candidate `tables` rows (`FOR UPDATE`), re-checks for overlapping active reservations on those
+tables while holding the locks, then inserts — rather than a declarative
+`EXCLUDE USING gist (table_id WITH =, time_range WITH &&)` constraint.
 
-**Why**: an application-only check-then-insert has a race window between the `SELECT` and the
-`INSERT` — two concurrent requests can both see "available". Wrapping the insert in a transaction
-with `SELECT ... FOR UPDATE` on the table row would work too, but requires remembering to take the
-lock on every code path that can create a reservation; the exclusion constraint makes the
-guarantee database-enforced and impossible to bypass by a future code path that forgets to lock.
-The application check stays because it lets the service return a friendly `RESERVATION_UNAVAILABLE`
-+ alternatives response instead of surfacing a raw constraint-violation error to the caller.
+**Why considered first**: a GiST exclusion constraint is the more "set it and forget it" option
+and was the original plan — but it needs a single row carrying both `table_id` and `time_range`
+together. Once table combination (`allow_table_combination`) requires a `reservation_tables` join
+table (a reservation can occupy more than one table), neither `time_range` nor `status` lives on
+that join row, so the constraint would need those columns denormalized onto
+`reservation_tables` and kept in sync via a trigger on every possible mutation of the parent
+reservation (date, time, duration, status). That's real ongoing complexity and a second source of
+truth that can drift.
+
+**Why row locking instead**: `SELECT ... FOR UPDATE` on the exact table row(s) being considered
+serializes any two transactions that touch the same table — the second one blocks until the first
+commits, at which point its re-check correctly sees the new reservation and reports
+`RESERVATION_UNAVAILABLE`. This is standard, explainable PostgreSQL locking (see
+`DATABASE.md`'s concurrency section), works identically for one table or several, and needs no
+denormalization. The tradeoff accepted: correctness now depends on every reservation-writing code
+path going through the same locking service method — there's exactly one such path
+(`reservationService`), so this is enforced by having no other way to write a reservation, not by
+reviewer discipline.
 
 ## JavaScript, not TypeScript
 
