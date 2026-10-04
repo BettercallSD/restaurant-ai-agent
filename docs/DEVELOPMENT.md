@@ -1,8 +1,7 @@
 # Development Log
 
 ## Current phase
-Phase 3 complete (database schema + migrations, verified against a real local Postgres). Starting
-Phase 4 (seed data).
+Phase 4 complete (seed data, verified). Starting Phase 5 (repository/data-access layer).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -21,13 +20,18 @@ Phase 4 (seed data).
   and test databases. `npm audit --omit=dev` is clean (0 vulnerabilities) after pinning
   `bcrypt@^6` — see `SECURITY.md`.
 
+- Phase 4: `src/db/seed.js` seeds "Himalayan Bites" — 1 restaurant (opening hours, combination
+  seating enabled), 1 owner user (bcrypt-hashed password, logged to console for local dev only),
+  6 tables (capacities 2/2/4/4/6/8), 5 menu categories, 17 realistic Nepali menu items (one
+  deliberately `is_available: false` to exercise that path later). Idempotent — re-ran it twice
+  against the dev database and row counts were identical both times.
+
 ## Current task
-Phase 4: seed data for "Himalayan Bites" (one realistic Nepali restaurant — tables, menu,
-categories, opening hours) via a seed script, not hardcoded in source.
+Phase 5: repository/data-access layer (the only code allowed to touch `pg` directly, per
+`ARCHITECTURE.md`'s layering) — restaurants, tables, menu, customers, reservations, orders.
 
 ## Next task
-Phase 5: repository/data-access layer (the only code allowed to touch `pg` directly, per
-`ARCHITECTURE.md`'s layering).
+Phase 6: business services built on top of the repositories (pricing, state-transition rules).
 
 ## Known issues
 - `reservation_tables` combination-seating (`allow_table_combination`) is schema-ready but the
@@ -44,7 +48,7 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Architecture + docs
 - [x] Database can be created from scratch
 - [x] Migrations work (verified up/down/up against a real Postgres instance)
-- [ ] Seed data works
+- [x] Seed data works (verified idempotent against a real Postgres instance)
 - [ ] Backend starts successfully
 - [ ] REST API works
 - [ ] Reservations work
