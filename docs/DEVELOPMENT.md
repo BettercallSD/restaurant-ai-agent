@@ -1,7 +1,7 @@
 # Development Log
 
 ## Current phase
-Phase 5 complete (repository/data-access layer, verified). Starting Phase 6 (business services).
+Phase 6 complete (business services, unit-tested). Starting Phase 7 (reservation engine).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -39,12 +39,28 @@ Phase 5 complete (repository/data-access layer, verified). Starting Phase 6 (bus
   overlap check actually catching a just-created reservation, server-side order pricing, and
   session-state merge-patching — all passed.
 
+- Phase 6: three pure business-logic services, deliberately kept DB-free so they're trivial to
+  unit test: `openingHoursService` (restaurant-timezone-aware "is this date/time bookable" check
+  and the candidate-time-slot generator `find_alternative_times` will use — built on `Intl`, no
+  date library dependency needed), `stateTransitionService` (the exact reservation/order state
+  machines from `AGENT_FLOW.md`, as `assertReservationTransition`/`assertOrderTransition`), and
+  `pricingService.buildOrderLines` (the concrete code that makes "never trust a client-supplied
+  price" true — it has no parameter a price could even be passed through). Added
+  `INVALID_ORDER_TRANSITION` to the error catalog in `ERROR_HANDLING.md` (parallel to the
+  reservation one). 28 unit tests across 3 suites, all passing, covering both the happy paths and
+  the specific malicious/invalid cases from `TESTING.md` (negative quantity, unavailable item,
+  unknown id, a smuggled `priceCents` field being silently ignored, every terminal-state
+  transition rejected).
+
 ## Current task
-Phase 6: business services built on top of the repositories (pricing, state-transition rules,
-and the table-allocation algorithm itself — exact fit → smallest suitable → allowed combination).
+Phase 7: the reservation engine (create/modify/cancel) wired through these services, plus the
+table-allocation algorithm itself (exact fit → smallest suitable → allowed combination) that
+Phase 6 deliberately left out since it needs the repository-layer locking primitives, not just
+pure logic.
 
 ## Next task
-Phase 7: the reservation engine (create/modify/cancel) wired through those services.
+Phase 8 concurrency hardening is really built alongside Phase 7 (the locking transaction IS the
+allocation algorithm's safety net) — then Phase 9, the order engine.
 
 ## Known issues
 - `reservation_tables` combination-seating (`allow_table_combination`) is schema-ready but the

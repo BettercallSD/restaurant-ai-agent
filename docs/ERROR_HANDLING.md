@@ -53,6 +53,7 @@ a 403 that would confirm existence-but-wrong-tenant. Where the caller is clearly
 | `VALIDATION_ERROR` | zod validation failed; `message` summarizes the first failure |
 | `RESERVATION_UNAVAILABLE` | no table/combination available at requested time |
 | `INVALID_RESERVATION_TRANSITION` | e.g. attempting CANCELLED → CONFIRMED |
+| `INVALID_ORDER_TRANSITION` | e.g. attempting to cancel a PREPARING order |
 | `RESERVATION_LOCKED` | (reserved for future use, not applicable to this project) |
 | `MENU_ITEM_UNAVAILABLE` | ordering an item with `is_available = false` |
 | `AWARD_INELIGIBLE` | (not applicable to this project) |
