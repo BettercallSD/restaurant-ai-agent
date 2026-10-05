@@ -59,10 +59,10 @@ required — see `docs/API.md`).
 
 ## Status
 
-Phase 14 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
+Phase 15 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
 API, real authentication/authorization/validation/rate-limiting, the full AI tool layer (13 tools,
-`docs/AI_TOOLS.md`), conversation-session state (transcript retrieval, explicit session-end, and a
-dashboard-facing AI-action-log endpoint), and structured/redacted logging are built and
-integration-tested (95 passing tests, including the full agentic check→book→confirm flow and live
-SQL-injection/XSS/mass-assignment/rate-limit/cross-tenant/log-redaction checks against a running
-server). Expanding automated test coverage toward the full `docs/TESTING.md` checklist is next.
+`docs/AI_TOOLS.md`), conversation-session state, and structured/redacted logging are built and
+integration-tested (97 passing tests — every required case in `docs/TESTING.md` is now checked
+off). Closing the last testing gap found a real idempotency-key race condition, fixed in both the
+reservation and order engines (see `docs/DECISIONS.md`). Finalizing partner integration docs is
+next.

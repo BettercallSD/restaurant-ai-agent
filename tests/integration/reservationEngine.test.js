@@ -186,6 +186,30 @@ describe('createReservation', () => {
     expect(failed).toHaveLength(1);
     expect(failed[0].reason.code).toBe('RESERVATION_UNAVAILABLE');
   });
+
+  test('two concurrent requests with the SAME idempotency key both succeed with the same reservation, not a duplicate or a raw DB error', async () => {
+    const date = dayOffset(RUN_BASE_DATE, 3);
+    const key = `it-race-same-key-${Date.now()}`;
+    const payload = {
+      customerPhone: uniquePhone('samekey'),
+      customerName: 'Idempotency Race',
+      date,
+      time: '19:00',
+      partySize: 2,
+      idempotencyKey: key,
+    };
+
+    const results = await Promise.allSettled([
+      reservationService.createReservation(restaurant, payload),
+      reservationService.createReservation(restaurant, payload),
+    ]);
+
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(results[0].value.id).toBe(results[1].value.id);
+
+    const { rows } = await pool.query(`SELECT count(*) FROM reservations WHERE idempotency_key = $1`, [key]);
+    expect(Number(rows[0].count)).toBe(1);
+  });
 });
 
 describe('modifyReservation / cancelReservation', () => {

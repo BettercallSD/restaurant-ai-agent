@@ -76,6 +76,27 @@ describe('createOrder', () => {
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY' });
   });
 
+  test('two concurrent requests with the SAME idempotency key both succeed with the same order, not a duplicate or a raw DB error', async () => {
+    const key = `it-order-race-${Date.now()}`;
+    const payload = {
+      customerPhone: uniquePhone('order-race'),
+      customerName: 'Idempotency Race',
+      items: [{ menuItemId: momo.id, quantity: 1 }],
+      idempotencyKey: key,
+    };
+
+    const results = await Promise.allSettled([
+      orderService.createOrder(restaurant, payload),
+      orderService.createOrder(restaurant, payload),
+    ]);
+
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(results[0].value.id).toBe(results[1].value.id);
+
+    const { rows } = await pool.query(`SELECT count(*) FROM orders WHERE idempotency_key = $1`, [key]);
+    expect(Number(rows[0].count)).toBe(1);
+  });
+
   test('rejects an unavailable menu item', async () => {
     await expect(
       orderService.createOrder(restaurant, {

@@ -16,7 +16,7 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 
 ## Required cases (tracked here, checked off as implemented)
 
-- [ ] Valid reservation
+- [x] Valid reservation (covered many times over since Phase 7 — checking off an earlier oversight)
 - [x] Unavailable table → alternatives returned (`tests/integration/reservationEngine.test.js`)
 - [x] Invalid party size (0 — DB check constraint). Negative/absurdly-large covered at the Phase
       11 validator layer once zod schemas exist; the service layer already rejects 0 via Postgres.
@@ -49,8 +49,12 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 - [x] Invalid/malformed ids (non-UUID strings) — see path traversal row above
 - [x] Unexpected extra fields in a request body (mass-assignment attempt, e.g. a client trying to
       set `status` or `restaurantId` directly) → silently stripped by zod, verified live
-- [ ] Duplicate state-changing request without an idempotency key racing itself (two concurrent
-      identical creates) → exactly one reservation/order row survives
+- [x] The same idempotency key racing itself (two concurrent identical creates — both reservations
+      and orders) → exactly one row survives, and **both** concurrent calls get the same success
+      response, not one success and one raw database error. This was a real bug, found with an
+      actual reproduction script, not written speculatively: fixed in both services by catching the
+      unique-constraint violation and recovering — see `DECISIONS.md` and
+      `tests/integration/{reservationEngine,orderEngine}.test.js`.
 - [x] Invalid AI tool arguments (wrong types, missing required fields) → `VALIDATION_ERROR`, no
       service/repository code reached — `tests/integration/aiTools.test.js`
 - [x] A staff JWT against an AI tool endpoint is rejected (403) — tool endpoints are AI-only
@@ -68,13 +72,19 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 ## Commands
 
 ```bash
-npm test                # migrates + seeds the test DB, then runs the full suite against it
+npm test                # migrates + resets + seeds the test DB, then runs the full suite against it
 npm run test:unit       # business-logic unit tests only, no DB required
 npm run migrate:test    # apply migrations to the test database
+npm run reset:test      # truncate dynamic tables (reservations, orders, sessions, ...) in the test DB
 npm run seed:test       # seed Himalayan Bites into the test database
 ```
 
-`npm test` is self-contained — it migrates and seeds `DATABASE_URL_TEST` before running Jest, so
-a fresh checkout only needs that env var set to a real (empty) Postgres database.
+`npm test` is self-contained — it migrates, resets, and seeds `DATABASE_URL_TEST` before running
+Jest, so a fresh checkout only needs that env var set to a real Postgres database, empty or not.
+The reset step exists because tests pick a random future date per run to avoid colliding with a
+*previous* run's own leftover rows — that works within reasonable bounds, but across enough
+repeated runs a random collision became observable in practice (caught during Phase 15, not
+theorized about). Resetting the dynamic tables before every run removes the root cause instead of
+just making collisions rarer. `src/db/resetTestData.js` refuses to run outside `NODE_ENV=test`.
 
 (Exact script names finalized when `package.json` lands in Phase 3; this file is updated then.)

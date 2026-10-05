@@ -6,6 +6,7 @@ const menuRepository = require('../repositories/menuRepository');
 const { buildOrderLines } = require('./pricingService');
 const { assertOrderTransition } = require('./stateTransitionService');
 const { conflict, notFound } = require('../errors/AppError');
+const { isUniqueViolation } = require('../utils/pgErrors');
 
 const formatOrder = (order, items) => ({
   id: order.id,
@@ -41,16 +42,21 @@ async function priceItems(restaurant, items) {
   return buildOrderLines(menuItemsById, items);
 }
 
+async function assertIdempotencyBodyMatches(restaurant, existing, items) {
+  const existingItems = await orderRepository.findItemsByOrderId(existing.id);
+  if (!itemsMatch(existingItems, items)) {
+    throw conflict(
+      'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY',
+      'This idempotency key was already used for a different order request.'
+    );
+  }
+  return existingItems;
+}
+
 async function createOrder(restaurant, { customerPhone, customerName, items, reservationId, idempotencyKey }) {
   const existing = await orderRepository.findByIdempotencyKey(restaurant.id, idempotencyKey);
   if (existing) {
-    const existingItems = await orderRepository.findItemsByOrderId(existing.id);
-    if (!itemsMatch(existingItems, items)) {
-      throw conflict(
-        'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY',
-        'This idempotency key was already used for a different order request.'
-      );
-    }
+    const existingItems = await assertIdempotencyBodyMatches(restaurant, existing, items);
     return formatOrder(existing, existingItems);
   }
 
@@ -66,22 +72,35 @@ async function createOrder(restaurant, { customerPhone, customerName, items, res
   const { lines, subtotalCents, totalCents } = await priceItems(restaurant, items);
   const customer = await customerRepository.findOrCreate(restaurant.id, customerPhone, customerName);
 
-  const order = await withTransaction(async (client) => {
-    const created = await orderRepository.insert(
-      {
-        restaurantId: restaurant.id,
-        customerId: customer.id,
-        reservationId: reservationId ?? null,
-        subtotalCents,
-        totalCents,
-        idempotencyKey,
-        status: 'PENDING',
-      },
-      client
-    );
-    await orderRepository.insertItems(created.id, lines, client);
-    return created;
-  });
+  let order;
+  try {
+    order = await withTransaction(async (client) => {
+      const created = await orderRepository.insert(
+        {
+          restaurantId: restaurant.id,
+          customerId: customer.id,
+          reservationId: reservationId ?? null,
+          subtotalCents,
+          totalCents,
+          idempotencyKey,
+          status: 'PENDING',
+        },
+        client
+      );
+      await orderRepository.insertItems(created.id, lines, client);
+      return created;
+    });
+  } catch (err) {
+    // Same race as reservations (docs/DECISIONS.md): two concurrent requests with the same
+    // idempotency key both pass the findByIdempotencyKey check before either commits. Recover the
+    // losing request gracefully instead of surfacing the raw constraint violation.
+    if (isUniqueViolation(err, 'orders_restaurant_idempotency_unique')) {
+      const winner = await orderRepository.findByIdempotencyKey(restaurant.id, idempotencyKey);
+      const winnerItems = await assertIdempotencyBodyMatches(restaurant, winner, items);
+      return formatOrder(winner, winnerItems);
+    }
+    throw err;
+  }
 
   return formatOrder(order, lines);
 }

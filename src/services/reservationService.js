@@ -7,6 +7,7 @@ const openingHoursService = require('./openingHoursService');
 const { assertReservationTransition } = require('./stateTransitionService');
 const { conflict, notFound, validationError } = require('../errors/AppError');
 const { toTimestampString, addMinutes } = require('../utils/dateTime');
+const { isUniqueViolation } = require('../utils/pgErrors');
 const { DEFAULT_RESERVATION_DURATION_MINUTES } = require('../config/constants');
 
 const formatReservation = (reservation, tables) => ({
@@ -51,18 +52,26 @@ function unavailableError(alternatives) {
   );
 }
 
+async function formatByIdWithTables(reservation) {
+  const tableIds = await reservationRepository.findTableIdsForReservation(reservation.id);
+  const tables = await tableRepository.findByIds(tableIds);
+  return formatReservation(reservation, tables);
+}
+
+function assertIdempotencyBodyMatches(existing, { date, time, partySize }) {
+  if (existing.date !== date || existing.time.slice(0, 5) !== time || existing.partySize !== partySize) {
+    throw conflict(
+      'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY',
+      'This idempotency key was already used for a different reservation request.'
+    );
+  }
+}
+
 async function createReservation(restaurant, { customerPhone, customerName, date, time, partySize, specialRequests, idempotencyKey }) {
   const existing = await reservationRepository.findByIdempotencyKey(restaurant.id, idempotencyKey);
   if (existing) {
-    if (existing.date !== date || existing.time.slice(0, 5) !== time || existing.partySize !== partySize) {
-      throw conflict(
-        'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY',
-        'This idempotency key was already used for a different reservation request.'
-      );
-    }
-    const tableIds = await reservationRepository.findTableIdsForReservation(existing.id);
-    const tables = await tableRepository.findByIds(tableIds);
-    return formatReservation(existing, tables);
+    assertIdempotencyBodyMatches(existing, { date, time, partySize });
+    return formatByIdWithTables(existing);
   }
 
   openingHoursService.assertReservationDateTimeIsBookable(restaurant, date, time);
@@ -73,32 +82,47 @@ async function createReservation(restaurant, { customerPhone, customerName, date
   const { date: endDate, time: endTime } = addMinutes(date, time, durationMinutes);
   const endAt = toTimestampString(endDate, endTime);
 
-  const result = await withTransaction(async (client) => {
-    const allocation = await tableAllocationService.allocateWithLock(client, {
-      restaurant,
-      partySize,
-      startAt,
-      endAt,
-    });
-    if (!allocation) return null;
-
-    const created = await reservationRepository.insert(
-      {
-        restaurantId: restaurant.id,
-        customerId: customer.id,
+  let result;
+  try {
+    result = await withTransaction(async (client) => {
+      const allocation = await tableAllocationService.allocateWithLock(client, {
+        restaurant,
         partySize,
-        date,
-        time,
-        durationMinutes,
-        specialRequests,
-        idempotencyKey,
-        status: 'CONFIRMED',
-      },
-      client
-    );
-    await reservationRepository.insertTables(created.id, allocation.map((t) => t.id), client);
-    return { reservation: created, tables: allocation };
-  });
+        startAt,
+        endAt,
+      });
+      if (!allocation) return null;
+
+      const created = await reservationRepository.insert(
+        {
+          restaurantId: restaurant.id,
+          customerId: customer.id,
+          partySize,
+          date,
+          time,
+          durationMinutes,
+          specialRequests,
+          idempotencyKey,
+          status: 'CONFIRMED',
+        },
+        client
+      );
+      await reservationRepository.insertTables(created.id, allocation.map((t) => t.id), client);
+      return { reservation: created, tables: allocation };
+    });
+  } catch (err) {
+    // Two concurrent requests with the SAME idempotency key both pass the findByIdempotencyKey
+    // check above before either has committed (classic check-then-act race), so both reach this
+    // INSERT. The unique constraint correctly lets only one through — this is the losing request
+    // recovering gracefully instead of surfacing a raw constraint-violation error. See
+    // docs/DECISIONS.md.
+    if (isUniqueViolation(err, 'reservations_restaurant_idempotency_unique')) {
+      const winner = await reservationRepository.findByIdempotencyKey(restaurant.id, idempotencyKey);
+      assertIdempotencyBodyMatches(winner, { date, time, partySize });
+      return formatByIdWithTables(winner);
+    }
+    throw err;
+  }
 
   if (!result) {
     const alternatives = await buildAlternatives(restaurant, { date, partySize, durationMinutes });
@@ -113,9 +137,7 @@ async function getReservation(restaurant, { reservationId, customerPhone }) {
     ? await reservationRepository.findByIdForRestaurant(reservationId, restaurant.id)
     : await reservationRepository.findMostRecentActiveByPhone(restaurant.id, customerPhone);
   if (!reservation) throw notFound('Reservation');
-  const tableIds = await reservationRepository.findTableIdsForReservation(reservation.id);
-  const tables = await tableRepository.findByIds(tableIds);
-  return formatReservation(reservation, tables);
+  return formatByIdWithTables(reservation);
 }
 
 async function modifyReservation(restaurant, reservationId, { partySize, date, time }) {

@@ -233,3 +233,13 @@ table.
 `unique(restaurant_id, idempotency_key)` constraint. A client (the AI orchestrator, retrying after
 a dropped response) sends the same `Idempotency-Key` header on a retried `POST`; the service looks
 up an existing row with that key first and returns it unchanged instead of creating a duplicate.
+
+That lookup-then-insert sequence has the same race shape as table booking: two concurrent requests
+with the *same* key can both pass the "not found" check before either commits. The `unique`
+constraint is what actually prevents two rows (proven with a real concurrent-request reproduction,
+not just reasoned about), but the losing request's insert then fails with a raw constraint
+violation rather than succeeding — so both `reservationService.createReservation` and
+`orderService.createOrder` catch that specific violation and recover by re-fetching the row the
+winner created, returning it as a success instead of propagating the database error. See
+`DECISIONS.md` for why this is handled as "catch and recover" rather than locking before the
+initial check.

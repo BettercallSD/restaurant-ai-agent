@@ -2,6 +2,32 @@
 
 Architecture Decision Record. Newest first.
 
+## Idempotency races recover by catching the unique-constraint violation, not by locking
+
+**Decision**: `reservationService.createReservation` and `orderService.createOrder` wrap their
+insert transaction in a try/catch. If the insert fails with a unique-constraint violation on the
+idempotency key specifically (`src/utils/pgErrors.js`'s `isUniqueViolation`, checking both
+`err.code === '23505'` and the exact constraint name), the catch block re-fetches the row by that
+key and returns it as a success — instead of locking anything up front to prevent the race from
+happening at all.
+
+**Why this surfaced**: the original check-then-insert code (`findByIdempotencyKey`, then insert if
+not found) has the same race shape as the table-booking problem in `DATABASE.md` — two concurrent
+requests with the *same* key can both pass the "not found" check before either commits. Proven with
+a real reproduction script, not just reasoned about: two `Promise.allSettled` calls with an
+identical idempotency key, and the loser came back with a raw `duplicate key value violates unique
+constraint` error instead of the same success response the winner got. The data was never at risk
+— Postgres's unique constraint guarantees exactly one row regardless — but the *API contract* for
+idempotency failed exactly when it mattered most (a genuine concurrent retry).
+
+**Why recover-after-conflict instead of lock-then-check** (e.g. an advisory lock keyed on the
+idempotency key before the `findByIdempotencyKey` read): a lock has to be acquired on every call,
+including the overwhelming majority that aren't racing anyone, for a race that's rare by
+construction (it requires the same caller to send the same key twice within the same few
+milliseconds). Catching the specific constraint violation only does extra work on the rare path
+that actually hits it, and reuses a guarantee the database was already providing rather than adding
+a second, application-level one that could drift out of sync with it.
+
 ## Hand-written function-calling schemas, not a generated ones
 
 **Decision**: `src/tools/schemas.js` hand-writes the 13 OpenAI-style function-calling JSON Schemas

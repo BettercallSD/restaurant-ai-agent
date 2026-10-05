@@ -1,8 +1,8 @@
 # Development Log
 
 ## Current phase
-Phase 14 complete (AI action log retrieval + structured, redaction-verified logging). Starting
-Phase 15 (expanding automated test coverage toward the full `TESTING.md` checklist).
+Phase 15 complete — every item in `TESTING.md`'s required-cases checklist is checked off, and
+closing the last one found a real bug. Starting Phase 16 (finalize partner integration docs).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -183,14 +183,37 @@ Phase 15 (expanding automated test coverage toward the full `TESTING.md` checkli
   zero matches; every occurrence of the `Authorization` header shows `"authorization":"[REDACTED]"`
   instead. 95/95 tests passing.
 
-## Current task
-Phase 15: expand automated test coverage toward the full checklist in `TESTING.md` (most items are
-already checked off incidentally from Phases 7-14; Phase 15 is about closing the remaining gaps
-deliberately rather than opportunistically).
+- Phase 15: closed the two remaining `TESTING.md` gaps. "Valid reservation" was a checklist
+  oversight (already covered since Phase 7) — just checked off. The real find:
+  "duplicate state-changing request without an idempotency key racing itself" turned out to
+  describe a genuine bug once actually tested, not a non-issue. `reservationService.createReservation`
+  and `orderService.createOrder` both did a plain check-then-insert on the idempotency key — the
+  same race shape as table booking (`DATABASE.md`), except nothing here was locking against it.
+  Proved it with a real reproduction script (two `Promise.allSettled` calls, same key): the data
+  stayed correct (the `unique` constraint allowed only one row), but the losing call got a raw
+  `duplicate key value violates unique constraint` error instead of the same success response the
+  winner got — exactly backwards from what an idempotency key is supposed to guarantee. Fixed in
+  both services by catching that specific constraint violation (`src/utils/pgErrors.js`) and
+  recovering by re-fetching the winning row, rather than adding a lock up front for a race that's
+  rare by construction. Added permanent regression tests in both
+  `tests/integration/reservationEngine.test.js` and `orderEngine.test.js`.
+  Immediately hit a second, unrelated problem while re-running the suite to confirm the fix: a
+  different test failed with a table-availability mismatch, then a *different* one failed on the
+  next run. Root cause: tests pick a random future date per run to avoid colliding with a
+  *previous* run's leftovers, but after enough `npm test` invocations in one session, a random
+  collision with an earlier run's own leftover rows actually happened. Added
+  `src/db/resetTestData.js` (truncates the dynamic tables, refuses to run outside `NODE_ENV=test`)
+  and a `reset:test` step `npm test` now runs before seeding — confirmed fixed by running the full
+  suite 3 times in a row with zero failures, not just once. 97/97 tests passing, and every item in
+  `TESTING.md`'s required-cases checklist is now checked off.
 
-## Next task
+## Current task
 Phase 16: finalize partner integration documentation (`INTEGRATION.md` and `src/tools/schemas.js`
 already exist from Phases 2/12 — Phase 16 is a dedicated pass to make sure nothing drifted).
+
+## Next task
+Phase 17: the final security audit pass (`SECURITY.md`'s checklist is already nearly all checked
+off incidentally; Phase 17 is a deliberate, skeptical re-verification, not a rubber stamp).
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -246,13 +269,14 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool/
       logging cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit
       checks and a live grep-for-the-raw-token-in-logs check against a running server)
-- [x] Automated tests pass (95/95 — `npm test`; more added each phase)
+- [x] Automated tests pass (97/97 — `npm test`; every `TESTING.md` required case now checked off)
 - [x] No secrets are committed
 - [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
       verified with cross-tenant *and* cross-session access attempts, live and in the test suite)
 - [x] SQL injection protection works (every query in the codebase is parameterized; verified live
       with real injection payloads against the running server, not just by inspection)
-- [x] Duplicate requests are handled (idempotency keys, reservations and orders)
+- [x] Duplicate requests are handled (idempotency keys, reservations and orders — including a
+      real concurrent-same-key race, found, fixed, and regression-tested in Phase 15)
 - [x] Transactions are used where necessary (reservation locking transaction; order create/modify)
 - [x] Documentation matches actual implementation (API.md, DATABASE.md, INTEGRATION.md updated
       this phase to match what was actually built, including two real gaps caught and fixed along
