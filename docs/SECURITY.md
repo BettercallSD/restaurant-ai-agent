@@ -1,9 +1,9 @@
 # Security
 
-Status: Phases 11-12 implemented authentication, authorization, zod validation, rate limiting, and
-the AI tool layer — the mitigations below marked with a file path are live and integration-tested,
-not just planned. A final audit pass still happens in Phase 17 before the "design phase" framing
-is fully retired.
+Status: Phases 11-14 implemented authentication, authorization, zod validation, rate limiting, the
+AI tool layer, and structured/redacted logging — the mitigations below marked with a file path are
+live and integration-tested, not just planned. A final audit pass still happens in Phase 17 before
+the "design phase" framing is fully retired.
 
 ## Threat model
 
@@ -22,7 +22,7 @@ is fully retired.
 | Duplicate state-changing requests | Idempotency keys on reservation/order creation (`DATABASE.md`), integration-tested including a genuine concurrent-request race. |
 | Leaked secrets | All secrets via `.env` (gitignored); `.env.example` has placeholders only; no secret is ever logged. |
 | Verbose production errors | Centralized error handler (`src/middleware/errorHandler.js`) strips internals in every environment (`ERROR_HANDLING.md`). |
-| Unsafe logs | Currently just `console.error` for unexpected errors (good enough to be visible, not yet structured). Structured `pino` logging with redaction of `password_hash`/`Authorization`/JWTs is Phase 14 — tracked in `DEVELOPMENT.md`, not done yet. |
+| Unsafe logs | `src/config/logger.js`: structured `pino` logging via `pino-http`, with `redact` paths covering `Authorization`/`Cookie` headers and any `password`/`passwordHash`/`token`/`aiToken` field. Request *bodies* are never logged at all (pino-http's default), which keeps customer names/phone numbers out of logs without needing a redaction rule per field. Verified live: issued a real staff JWT, exercised several authenticated endpoints, then grepped the raw token value against the log file — zero matches, every occurrence shows `"authorization":"[REDACTED]"`. |
 | XSS | No user-supplied text is ever rendered as raw HTML — this is an API-only backend (no server-rendered views); the dashboard (partner's React/whatever frontend) is responsible for its own output-encoding of any text it displays, but this backend never emits an HTML response. |
 | CSRF | Not applicable to a stateless, JWT-bearer-token API with no cookie-based session auth. |
 
@@ -60,7 +60,7 @@ and the available fix requires `jest@30`, a breaking major version bump. Accepte
 tracked v1 risk rather than destabilizing the test runner under hackathon time pressure; re-checked
 in the Phase 17 final audit before declaring the backend complete.
 
-## Interim status after Phase 12 (final pass still happens in Phase 17)
+## Interim status after Phase 14 (final pass still happens in Phase 17)
 
 - [x] No SQL string concatenation
 - [x] Parameterized queries everywhere
@@ -85,8 +85,8 @@ in the Phase 17 final audit before declaring the backend complete.
       the same services everything else uses, never a repository or `pg` directly)
 - [x] Sensitive information not exposed (password hash never returned; AI/staff tokens signed with
       separate secrets; `restaurant_id` never trusted from a client field)
-- [ ] Safe logging (Phase 14 — currently `console.error` only, not yet redaction-aware structured
-      logging; tracked, not forgotten)
+- [x] Safe logging (structured `pino`/`pino-http`, redaction verified live against a running
+      server — see the threat-model row above)
 - [x] Dependency audit (`npm audit --omit=dev`: 0 vulnerabilities; see above)
 - [x] Security tests passing (SQL injection, XSS, mass assignment, auth bypass attempts, cross-
       tenant/cross-session access, and rate limiting all verified both in the automated suite and

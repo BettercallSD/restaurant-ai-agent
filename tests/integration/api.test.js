@@ -333,6 +333,27 @@ describe('session routes', () => {
     expect(res.body.session.status).toBe('ABANDONED');
   });
 
+  test("GET .../ai-actions returns this session's tool-call trace", async () => {
+    const created = await request(app)
+      .post(`/api/v1/restaurants/${restaurant.id}/sessions`)
+      .send({ customerPhone: uniquePhone('trace') });
+    const { aiToken } = created.body;
+    const sessionId = created.body.session.id;
+
+    await request(app)
+      .post('/api/v1/ai/tools/get-restaurant-info')
+      .set('Authorization', `Bearer ${aiToken}`)
+      .send({});
+
+    const res = await request(app)
+      .get(`/api/v1/restaurants/${restaurant.id}/sessions/${sessionId}/ai-actions`)
+      .set('Authorization', `Bearer ${aiToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.actions).toEqual([
+      expect.objectContaining({ toolName: 'get_restaurant_info', status: 'SUCCESS' }),
+    ]);
+  });
+
   test("one session's aiToken cannot read a DIFFERENT session's data, even for the same restaurant", async () => {
     const sessionA = await request(app)
       .post(`/api/v1/restaurants/${restaurant.id}/sessions`)

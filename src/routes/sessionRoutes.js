@@ -45,5 +45,12 @@ router.post(
   validate(endSessionSchema),
   controller.endSession
 );
+router.get(
+  '/:sessionId/ai-actions',
+  validateUuidParam('sessionId'),
+  authenticate,
+  authorizeActor,
+  controller.listAiActions
+);
 
 module.exports = router;

@@ -1,8 +1,8 @@
 # Development Log
 
 ## Current phase
-Phase 13 complete (conversation/session state — transcript retrieval and explicit session-end).
-Starting Phase 14 (AI action logging retrieval + structured logging).
+Phase 14 complete (AI action log retrieval + structured, redaction-verified logging). Starting
+Phase 15 (expanding automated test coverage toward the full `TESTING.md` checklist).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -168,15 +168,29 @@ Starting Phase 14 (AI action logging retrieval + structured logging).
   sub-resources (`authorizeActor` + the session-id check in `sessionController.js`).
   94/94 tests passing; verified live too (transcript retrieval, ending a session).
 
+- Phase 14: `GET /restaurants/:id/sessions/:sessionId/ai-actions` (`sessionController.listAiActions`
+  — the repository function `aiActionRepository.listForSession` has existed since Phase 5, but
+  nothing read it back until now), scoped and authorized identically to the transcript endpoint
+  from Phase 13. `src/config/logger.js` (one shared `pino` instance, `redact` paths covering
+  `Authorization`/`Cookie` headers and any `password`/`token`/`aiToken` field anywhere in a logged
+  object) wired into `app.js` via `pino-http` for structured request logging, and into
+  `errorHandler.js` (replacing `console.error`) so an unexpected failure's log line is
+  automatically correlated with its request id. Request *bodies* are never logged at all — that's
+  pino-http's default, and it's what keeps customer names/phone numbers out of logs without a
+  redaction rule for every possible field name.
+  Verified live, not just configured: logged in as staff, exercised several authenticated
+  endpoints (including an AI tool call), then grepped the server's log file for the raw JWT —
+  zero matches; every occurrence of the `Authorization` header shows `"authorization":"[REDACTED]"`
+  instead. 95/95 tests passing.
+
 ## Current task
-Phase 14: AI action log retrieval for the dashboard (a `GET` endpoint reading a session's
-`ai_actions` trace — the write path has existed and been tested since Phase 12), plus the
-structured `pino` logging with redaction that's been deferred since Phase 10.
+Phase 15: expand automated test coverage toward the full checklist in `TESTING.md` (most items are
+already checked off incidentally from Phases 7-14; Phase 15 is about closing the remaining gaps
+deliberately rather than opportunistically).
 
 ## Next task
-Phase 15: expand automated test coverage toward the full checklist in `TESTING.md` (most items are
-already checked off incidentally from Phases 7-13; Phase 15 is about closing the remaining gaps
-deliberately rather than opportunistically).
+Phase 16: finalize partner integration documentation (`INTEGRATION.md` and `src/tools/schemas.js`
+already exist from Phases 2/12 — Phase 16 is a dedicated pass to make sure nothing drifted).
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -193,8 +207,8 @@ deliberately rather than opportunistically).
   need a smarter search for a restaurant with dozens of tables.
 - Dev-dependency `braces` (via `jest`) has an open high-severity advisory; tracked in
   `SECURITY.md`, not in the production dependency tree.
-- Logging is currently just `console.error` for unexpected failures — structured, redaction-aware
-  logging (`pino`) is Phase 14, not done yet.
+- Log output isn't shipped anywhere yet (stdout only) — fine for a single hackathon demo instance,
+  but a real deployment would want it collected somewhere queryable.
 
 ## Important decisions
 See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricing, Postgres
@@ -224,14 +238,15 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Conversation/session state works (create/patch-merge/append-message/list-transcript/end,
       over HTTP, with real session-scoped auth)
 - [x] AI actions are logged (every tool call, success or failure, writes to `ai_actions` with
-      duration/sanitized input/sanitized result — verified live and in
-      `tests/integration/aiTools.test.js`; a dashboard-facing read endpoint for this is Phase 14)
+      duration/sanitized input/sanitized result, and a dashboard-facing `GET .../ai-actions`
+      endpoint reads them back — verified live and in `tests/integration/aiTools.test.js` +
+      `api.test.js`)
 - [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; `src/tools/schemas.js`
       now gives the function-calling schemas it promised; finalized further in Phase 16)
-- [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool
-      cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit checks
-      against a running server)
-- [x] Automated tests pass (94/94 — `npm test`; more added each phase)
+- [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool/
+      logging cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit
+      checks and a live grep-for-the-raw-token-in-logs check against a running server)
+- [x] Automated tests pass (95/95 — `npm test`; more added each phase)
 - [x] No secrets are committed
 - [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
       verified with cross-tenant *and* cross-session access attempts, live and in the test suite)

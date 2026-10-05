@@ -1,4 +1,5 @@
 const { AppError } = require('../errors/AppError');
+const { logger } = require('../config/logger');
 
 /**
  * The single place that turns an error into an HTTP response, matching the envelope in
@@ -17,9 +18,11 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
-  // eslint-disable-next-line no-console -- structured logging (pino) lands in Phase 14; this is
-  // the minimum needed now so an unexpected failure is at least visible server-side.
-  console.error('Unexpected error:', err);
+  // `req.log` (set by pino-http in app.js) is already bound to this request's id, so the line
+  // below is automatically correlated with the access-log line for the same request — no manual
+  // request-id plumbing needed. Falls back to the shared logger for the rare case this handler
+  // runs outside pino-http's middleware chain (e.g. a unit test that builds a bare Express app).
+  (req.log || logger).error({ err }, 'Unexpected error');
   return res.status(500).json({
     success: false,
     error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' },

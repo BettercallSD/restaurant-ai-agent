@@ -1,7 +1,7 @@
 const app = require('./app');
 const env = require('./config/env');
+const { logger } = require('./config/logger');
 
 app.listen(env.PORT, () => {
-  // eslint-disable-next-line no-console -- startup banner, not a request-path log
-  console.log(`restaurant-ai-agent listening on port ${env.PORT} (${env.NODE_ENV})`);
+  logger.info(`restaurant-ai-agent listening on port ${env.PORT} (${env.NODE_ENV})`);
 });

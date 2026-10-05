@@ -1,4 +1,5 @@
 const sessionRepository = require('../repositories/sessionRepository');
+const aiActionRepository = require('../repositories/aiActionRepository');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const { notFound } = require('../errors/AppError');
 const { signAiSessionToken } = require('../utils/jwt');
@@ -78,4 +79,25 @@ const endSession = asyncHandler(async (req, res) => {
   res.json({ success: true, session: formatSession(updated) });
 });
 
-module.exports = { createSession, getSession, patchSessionState, appendMessage, listMessages, endSession };
+/**
+ * The "AI activity" trace docs/AI_TOOLS.md describes — every tool call for this session, success
+ * or failure, with timing and the sanitized input/result each call was logged with
+ * (`src/controllers/aiToolController.js`'s `tool()` wrapper has been writing these since Phase
+ * 12; this is the first time anything reads them back).
+ */
+const listAiActions = asyncHandler(async (req, res) => {
+  const existing = await sessionRepository.findById(req.params.sessionId);
+  assertCanAccessSession(req, existing);
+  const actions = await aiActionRepository.listForSession(req.params.sessionId);
+  res.json({ success: true, actions });
+});
+
+module.exports = {
+  createSession,
+  getSession,
+  patchSessionState,
+  appendMessage,
+  listMessages,
+  endSession,
+  listAiActions,
+};

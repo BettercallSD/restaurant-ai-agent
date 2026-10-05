@@ -1,10 +1,11 @@
 # API
 
-Status: Phases 10-12 implemented the routes below, with real authentication/authorization, zod
-validation, rate limiting, and the AI tool layer — verified against a real Postgres test database
-via Supertest (`tests/integration/*.test.js`) and manually against a running server (login, token
-reuse, cross-tenant and cross-session access attempts, injection/XSS/mass-assignment payloads, the
-full agentic check→book→confirm flow).
+Status: Phases 10-14 implemented the routes below, with real authentication/authorization, zod
+validation, rate limiting, the AI tool layer, session transcript/end, and AI action log retrieval —
+verified against a real Postgres test database via Supertest (`tests/integration/*.test.js`) and
+manually against a running server (login, token reuse, cross-tenant and cross-session access
+attempts, injection/XSS/mass-assignment payloads, the full agentic check→book→confirm flow, and —
+new this phase — confirming live that a raw bearer token never appears in a log line).
 
 Base path: `/api/v1`. All request/response bodies are JSON. Resources are nested under the
 restaurant they belong to: `/restaurants/:restaurantId/...`.
@@ -70,6 +71,9 @@ Same auth/rate-limit model as reservations.
 - `POST /restaurants/:restaurantId/sessions/:sessionId/end` — `{ status? }` (`COMPLETED` by
   default, or `ABANDONED`). Optional — an un-ended session is simply left `ACTIVE`, which is the
   documented default, not a bug; call this only when the telephony layer has a clean hangup signal.
+- `GET /restaurants/:restaurantId/sessions/:sessionId/ai-actions` — the dashboard's "AI activity"
+  trace: `{ success, actions: [{ id, toolName, status, durationMs, sanitizedInput, sanitizedResult, createdAt }] }`,
+  in chronological order. Populated automatically by every `/ai/tools/*` call for this session.
 
 ## AI tools — AI session token only (staff JWT rejected with 403)
 `POST /api/v1/ai/tools/<tool-name>`, one per tool in `AI_TOOLS.md` (`get-restaurant-info`,
