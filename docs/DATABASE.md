@@ -21,6 +21,7 @@ The tenant root.
 | name | text not null | |
 | slug | text unique not null | used in URLs / phone-number routing lookups |
 | phone | text | the restaurant's own line |
+| address | text | shown by `get_restaurant_info` and the dashboard; no structured geocoding in v1 |
 | timezone | text not null default 'Asia/Kathmandu' | all date/time logic resolves in this zone |
 | opening_hours | jsonb not null | per-weekday open/close, used by alternative-time search |
 | allow_table_combination | boolean not null default false | gates multi-table allocation |

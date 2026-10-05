@@ -1,67 +1,69 @@
 # API
 
-Status: design phase — endpoint list below is implemented starting Phase 10. Each endpoint gets a
-full entry (purpose, auth, request, response, validation, errors, example) here as it's built;
-until then this is the planned surface.
+Status: Phase 10 implemented the routes below (restaurant/menu/tables, reservations, orders,
+sessions) and verified each one against a real Postgres test database via Supertest
+(`tests/integration/api.test.js`). **No authentication exists yet** — every route resolves the
+restaurant purely from the URL's `:restaurantId` with no check that the caller is allowed to act
+on it (see the ⚠️ warning in `src/middleware/resolveRestaurant.js`). Auth, the `Idempotency-Key`→
+zod-schema upgrade, and the `/auth/login` + AI-tool endpoints below land in Phase 11/12 — don't
+treat this surface as tenant-isolated until then. This file is updated again once that lands.
 
-Base path: `/api/v1`. All request/response bodies are JSON. Auth is `Authorization: Bearer <token>`
-(staff JWT, or an AI-session token — see `SECURITY.md`).
+Base path: `/api/v1`. All request/response bodies are JSON. Resources are nested under the
+restaurant they belong to: `/restaurants/:restaurantId/...`.
 
-## Auth
-- `POST /auth/login` — staff login (email + password) → JWT. Rate-limited.
+## Health
+- `GET /health` (outside `/api/v1`) — liveness check, no restaurant scope. `{ success: true, status: "ok" }`.
 
-## Restaurant / menu (mostly dashboard-facing, read paths also used by AI tools internally)
-- `GET /restaurants/:id`
-- `GET /restaurants/:id/tables`
-- `POST /restaurants/:id/tables` (staff, manager+)
-- `GET /restaurants/:id/menu`
-- `POST /restaurants/:id/menu-items` (staff, manager+)
-- `PATCH /restaurants/:id/menu-items/:itemId` (staff, manager+)
+## Restaurant / menu / tables (implemented, read-only)
+- `GET /restaurants/:restaurantId` → `{ success, restaurant: { id, name, phone, address, openingHours, timezone } }`
+- `GET /restaurants/:restaurantId/tables` → `{ success, tables: [{ id, label, capacity }] }`
+- `GET /restaurants/:restaurantId/menu` (optional `?categoryId=`) →
+  `{ success, categories: [{ id, name, items: [{ id, name, description, priceCents, isAvailable }] }] }`
 
-## Reservations
-- `POST /reservations` — requires `Idempotency-Key` header
-- `GET /reservations/:id`
-- `PATCH /reservations/:id`
-- `POST /reservations/:id/cancel`
-- `GET /reservations?restaurantId=&date=` (dashboard list view, staff-scoped)
+Staff-only writes (`POST .../tables`, `POST .../menu-items`, `PATCH .../menu-items/:id`) are
+intentionally **not built yet** — building a mutation endpoint before auth exists would let anyone
+edit any restaurant's menu, which is worse than not having the endpoint. They land with Phase 11.
 
-## Orders
-- `POST /orders` — requires `Idempotency-Key` header
-- `GET /orders/:id`
-- `PATCH /orders/:id`
-- `POST /orders/:id/cancel`
+## Reservations (implemented)
+- `POST /restaurants/:restaurantId/reservations` — requires `Idempotency-Key` header.
+  Body: `{ customer: { phone, name? }, date, time, partySize, specialRequests? }`.
+  → 201 `{ success, reservation: { id, status, date, time, partySize, specialRequests, tables } }`,
+  or 409 `RESERVATION_UNAVAILABLE` with an `alternatives` array (see `ERROR_HANDLING.md`).
+- `GET /restaurants/:restaurantId/reservations/:reservationId`
+- `PATCH /restaurants/:restaurantId/reservations/:reservationId` — any of `{ date, time, partySize }`
+- `POST /restaurants/:restaurantId/reservations/:reservationId/cancel` — idempotent
 
-## Conversation sessions (used by the AI orchestrator)
-- `POST /sessions` — create a session for an inbound call, scoped to the restaurant the dialed
-  number resolves to; returns the session-scoped AI token
-- `GET /sessions/:id`
-- `PATCH /sessions/:id` — merge-patch `state`
-- `POST /sessions/:id/messages` — append a transcript entry
+A dashboard list view (`GET .../reservations?date=`) is deferred to Phase 11 along with staff auth,
+since "list every reservation" is exactly the kind of endpoint that must not be open to anyone.
 
-## AI tools
-- `POST /ai/tools/get-restaurant-info`
-- `POST /ai/tools/get-menu`
-- `POST /ai/tools/check-item-availability`
-- `POST /ai/tools/check-table-availability`
-- `POST /ai/tools/find-alternative-times`
-- `POST /ai/tools/create-reservation`
-- `POST /ai/tools/get-reservation`
-- `POST /ai/tools/modify-reservation`
-- `POST /ai/tools/cancel-reservation`
-- `POST /ai/tools/create-order`
-- `POST /ai/tools/modify-order`
-- `POST /ai/tools/cancel-order`
-- `POST /ai/tools/transfer-to-human`
+## Orders (implemented)
+- `POST /restaurants/:restaurantId/orders` — requires `Idempotency-Key` header.
+  Body: `{ customer: { phone, name? }, items: [{ menuItemId, quantity }], reservationId? }`.
+  → 201 `{ success, order: { id, status, reservationId, items, subtotalCents, totalCents } }`
+- `GET /restaurants/:restaurantId/orders/:orderId`
+- `PATCH /restaurants/:restaurantId/orders/:orderId` — `{ items: [...] }` (full replacement, only while `PENDING`)
+- `POST /restaurants/:restaurantId/orders/:orderId/cancel` — idempotent
 
-See `AI_TOOLS.md` for each tool's exact input/output contract and `INTEGRATION.md` for how the
-partner's orchestrator is expected to call these.
+## Conversation sessions (implemented; used by the AI orchestrator)
+- `POST /restaurants/:restaurantId/sessions` — body: `{ customerPhone?, channel? }` →
+  `{ success, session: { id, restaurantId, channel, state, status } }`. **Phase 11** adds the
+  session-scoped AI token to this response and requires it on subsequent calls.
+- `GET /restaurants/:restaurantId/sessions/:sessionId`
+- `PATCH /restaurants/:restaurantId/sessions/:sessionId` — `{ state: { ...fields to merge } }`
+- `POST /restaurants/:restaurantId/sessions/:sessionId/messages` — `{ role, content }`
 
-## Example (filled in fully once implemented)
+## Not yet built
+- `POST /auth/login` (staff email+password → JWT) — Phase 11
+- `GET /restaurants/:id/reservations` dashboard list — Phase 11 (needs staff auth)
+- `POST`/`PATCH` on tables and menu items — Phase 11 (needs staff auth)
+- `/ai/tools/*` — Phase 12; contracts already specified in `AI_TOOLS.md`
+
+## Example (as implemented)
 
 ```
-POST /api/v1/reservations
-Authorization: Bearer <token>
-Idempotency-Key: 3f9c...
+POST /api/v1/restaurants/dcadba63-.../reservations
+Idempotency-Key: 3f9c2e1a-...
+Content-Type: application/json
 
 {
   "customer": { "name": "Saurav", "phone": "+977..." },
@@ -75,11 +77,13 @@ Idempotency-Key: 3f9c...
 {
   "success": true,
   "reservation": {
-    "id": "...",
+    "id": "8571a626-...",
     "status": "CONFIRMED",
     "date": "2026-10-05",
-    "time": "19:00",
-    "partySize": 5
+    "time": "19:00:00",
+    "partySize": 5,
+    "specialRequests": null,
+    "tables": [{ "id": "...", "label": "T5", "capacity": 6 }]
   }
 }
 ```

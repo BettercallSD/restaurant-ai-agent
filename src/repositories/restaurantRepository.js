@@ -11,6 +11,7 @@ const mapRestaurant = (row) => ({
   name: row.name,
   slug: row.slug,
   phone: row.phone,
+  address: row.address,
   timezone: row.timezone,
   openingHours: row.opening_hours,
   allowTableCombination: row.allow_table_combination,
@@ -19,7 +20,7 @@ const mapRestaurant = (row) => ({
 
 async function findById(id, executor = pool) {
   const result = await executor.query(
-    `SELECT id, name, slug, phone, timezone, opening_hours, allow_table_combination, is_active
+    `SELECT id, name, slug, phone, address, timezone, opening_hours, allow_table_combination, is_active
      FROM restaurants
      WHERE id = $1`,
     [id]
@@ -29,7 +30,7 @@ async function findById(id, executor = pool) {
 
 async function findBySlug(slug, executor = pool) {
   const result = await executor.query(
-    `SELECT id, name, slug, phone, timezone, opening_hours, allow_table_combination, is_active
+    `SELECT id, name, slug, phone, address, timezone, opening_hours, allow_table_combination, is_active
      FROM restaurants
      WHERE slug = $1`,
     [slug]

@@ -82,11 +82,27 @@ const MENU = [
 async function seed() {
   await withTransaction(async (client) => {
     const restaurantResult = await client.query(
-      `INSERT INTO restaurants (name, slug, phone, timezone, opening_hours, allow_table_combination, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+      `INSERT INTO restaurants (name, slug, phone, address, timezone, opening_hours, allow_table_combination, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (slug) DO UPDATE SET
+         name = EXCLUDED.name,
+         phone = EXCLUDED.phone,
+         address = EXCLUDED.address,
+         timezone = EXCLUDED.timezone,
+         opening_hours = EXCLUDED.opening_hours,
+         allow_table_combination = EXCLUDED.allow_table_combination,
+         is_active = EXCLUDED.is_active
        RETURNING id`,
-      ['Himalayan Bites', 'himalayan-bites', '+977-1-4123456', 'Asia/Kathmandu', OPENING_HOURS, true, true]
+      [
+        'Himalayan Bites',
+        'himalayan-bites',
+        '+977-1-4123456',
+        'Durbar Marg, Kathmandu 44600, Nepal',
+        'Asia/Kathmandu',
+        OPENING_HOURS,
+        true,
+        true,
+      ]
     );
     const restaurantId = restaurantResult.rows[0].id;
 

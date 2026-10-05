@@ -36,18 +36,28 @@ auth, `node-pg-migrate`, Jest + Supertest. See `docs/ARCHITECTURE.md` for why.
 
 ## Setup
 
+Requires Node 18+ and a Postgres database (local or Neon free tier).
+
 ```bash
-cp .env.example .env     # fill in DATABASE_URL, JWT_SECRET, etc.
+cp .env.example .env       # fill in DATABASE_URL, DATABASE_URL_TEST, JWT_SECRET, AI_SESSION_SECRET
 npm install
-npm run migrate          # applies all migrations
-npm run seed              # seeds "Himalayan Bites" sample restaurant
-npm run dev                # starts the API on PORT (default 3000)
+npm run migrate            # applies all migrations
+npm run seed                # seeds "Himalayan Bites" sample restaurant
+npm run dev                  # starts the API on PORT (default 3000), auto-restarts on change
 ```
 
-(Finalized exact commands land with `package.json` in Phase 3 — this section is kept accurate as
-each piece is built, per `docs/DEVELOPMENT.md`.)
+Verify it's up: `curl http://localhost:3000/health` → `{"success":true,"status":"ok"}`.
+
+```bash
+npm test                    # migrates + seeds DATABASE_URL_TEST, then runs the full test suite
+```
+
+**⚠️ No authentication exists yet** (Phase 11, in progress) — every restaurant-scoped endpoint
+currently trusts the `:restaurantId` in the URL with no check that the caller may act on it. See
+`docs/DEVELOPMENT.md`'s Known Issues before treating this as a secured multi-tenant API.
 
 ## Status
 
-Phase 2 of 18 (see `docs/DEVELOPMENT.md`) — architecture and documentation complete, implementation
-starting with the database schema.
+Phase 10 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, and the
+REST API are built and integration-tested (66 passing tests, including live SQL-injection/XSS/
+mass-assignment checks against a running server). Authentication/authorization is next.

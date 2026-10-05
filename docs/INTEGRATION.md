@@ -8,15 +8,17 @@ you need is the tool/API shapes below and in `AI_TOOLS.md` / `API.md`.
 ```
 Caller dials restaurant's number
   → your telephony layer identifies which restaurant that number belongs to
-  → POST /api/v1/sessions { restaurantId, customerPhone }
-      → backend returns { sessionId, aiToken, state: {} }
+  → POST /api/v1/restaurants/:restaurantId/sessions { customerPhone }
+      → backend returns { session: { id, state: {} } } (Phase 11 adds an aiToken here too)
   → your orchestration loop runs: STT → LLM decides intent/tool → call the matching
-    /api/v1/ai/tools/* endpoint with Authorization: Bearer <aiToken>
+    /api/v1/ai/tools/* endpoint (Phase 12) with Authorization: Bearer <aiToken>
   → backend returns a structured JSON result (never prose) — your LLM turns that into speech via TTS
-  → as slots get filled (date, time, partySize, name, ...), PATCH /api/v1/sessions/:id with the
-    new fields so you don't have to carry state yourself between turns
-  → POST /api/v1/sessions/:id/messages to log each turn's transcript (optional but recommended —
-    powers the dashboard's "AI activity" view via ai_actions + conversation_messages)
+  → as slots get filled (date, time, partySize, name, ...), PATCH
+    /api/v1/restaurants/:restaurantId/sessions/:id { state: {...} } with the new fields so you
+    don't have to carry state yourself between turns
+  → POST /api/v1/restaurants/:restaurantId/sessions/:id/messages to log each turn's transcript
+    (optional but recommended — powers the dashboard's "AI activity" view via ai_actions +
+    conversation_messages)
   → on call end: the session is just left to expire (or you can mark it ended if you have a clean
     hangup signal) — no explicit "close" call is required
 ```
