@@ -4,7 +4,12 @@ const { validate } = require('../middleware/validate');
 const { validateUuidParam } = require('../middleware/validateParams');
 const { authenticate } = require('../middleware/authenticate');
 const { authorizeActor } = require('../middleware/authorizeActor');
-const { createSessionSchema, patchSessionStateSchema, appendMessageSchema } = require('../validators/sessionValidators');
+const {
+  createSessionSchema,
+  patchSessionStateSchema,
+  appendMessageSchema,
+  endSessionSchema,
+} = require('../validators/sessionValidators');
 const { sessionCreateLimiter } = require('../middleware/rateLimiters');
 
 const router = express.Router({ mergeParams: true });
@@ -30,6 +35,15 @@ router.post(
   authorizeActor,
   validate(appendMessageSchema),
   controller.appendMessage
+);
+router.get('/:sessionId/messages', validateUuidParam('sessionId'), authenticate, authorizeActor, controller.listMessages);
+router.post(
+  '/:sessionId/end',
+  validateUuidParam('sessionId'),
+  authenticate,
+  authorizeActor,
+  validate(endSessionSchema),
+  controller.endSession
 );
 
 module.exports = router;

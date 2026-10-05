@@ -304,6 +304,33 @@ describe('session routes', () => {
       .set('Authorization', `Bearer ${aiToken}`)
       .send({ role: 'customer', content: 'Table for 4 tomorrow' });
     expect(messaged.status).toBe(201);
+
+    const transcript = await request(app)
+      .get(`/api/v1/restaurants/${restaurant.id}/sessions/${sessionId}/messages`)
+      .set('Authorization', `Bearer ${aiToken}`);
+    expect(transcript.status).toBe(200);
+    expect(transcript.body.messages).toEqual([
+      expect.objectContaining({ role: 'customer', content: 'Table for 4 tomorrow' }),
+    ]);
+
+    const ended = await request(app)
+      .post(`/api/v1/restaurants/${restaurant.id}/sessions/${sessionId}/end`)
+      .set('Authorization', `Bearer ${aiToken}`)
+      .send({});
+    expect(ended.status).toBe(200);
+    expect(ended.body.session.status).toBe('COMPLETED');
+  });
+
+  test('end defaults to COMPLETED but accepts an explicit ABANDONED status', async () => {
+    const created = await request(app)
+      .post(`/api/v1/restaurants/${restaurant.id}/sessions`)
+      .send({ customerPhone: uniquePhone('abandon') });
+    const res = await request(app)
+      .post(`/api/v1/restaurants/${restaurant.id}/sessions/${created.body.session.id}/end`)
+      .set('Authorization', `Bearer ${created.body.aiToken}`)
+      .send({ status: 'ABANDONED' });
+    expect(res.status).toBe(200);
+    expect(res.body.session.status).toBe('ABANDONED');
   });
 
   test("one session's aiToken cannot read a DIFFERENT session's data, even for the same restaurant", async () => {

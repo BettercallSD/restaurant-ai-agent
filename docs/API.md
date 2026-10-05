@@ -65,6 +65,11 @@ Same auth/rate-limit model as reservations.
   this session's data.
 - `PATCH /restaurants/:restaurantId/sessions/:sessionId` — `{ state: { ...fields to merge } }`
 - `POST /restaurants/:restaurantId/sessions/:sessionId/messages` — `{ role, content }`
+- `GET /restaurants/:restaurantId/sessions/:sessionId/messages` — the full transcript in order:
+  `{ success, messages: [{ role, content, createdAt }] }`
+- `POST /restaurants/:restaurantId/sessions/:sessionId/end` — `{ status? }` (`COMPLETED` by
+  default, or `ABANDONED`). Optional — an un-ended session is simply left `ACTIVE`, which is the
+  documented default, not a bug; call this only when the telephony layer has a clean hangup signal.
 
 ## AI tools — AI session token only (staff JWT rejected with 403)
 `POST /api/v1/ai/tools/<tool-name>`, one per tool in `AI_TOOLS.md` (`get-restaurant-info`,

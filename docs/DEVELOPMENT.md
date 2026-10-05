@@ -1,8 +1,8 @@
 # Development Log
 
 ## Current phase
-Phase 12 complete (AI tool layer — the full agentic check→book→confirm flow is live and
-integration-tested). Starting Phase 13 (conversation/session state polish).
+Phase 13 complete (conversation/session state — transcript retrieval and explicit session-end).
+Starting Phase 14 (AI action logging retrieval + structured logging).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -153,16 +153,30 @@ integration-tested). Starting Phase 13 (conversation/session state polish).
   orders ignoring a smuggled price, and `transfer_to_human`. Verified live against a running server
   too. Full suite: 93/93 passing.
 
+- Phase 13: correcting a speculation from the previous entry first — a "slot normalization helper"
+  was floated here as possible Phase 13 work, but on reflection that would be the backend doing
+  NLP/language interpretation, which `AGENT_FLOW.md` explicitly scopes to the AI side only ("the
+  backend only ever receives already-normalized structured values... does not attempt any NLP").
+  Building one would quietly cross that boundary, so it was dropped rather than built.
+  What Phase 13 actually needed: two concrete, real gaps. `GET
+  /restaurants/:id/sessions/:sessionId/messages` (`sessionRepository.listMessages`) — there was a
+  way to *write* a transcript message but no way to *read it back*, which the dashboard's "AI
+  activity" view needs. And `POST /restaurants/:id/sessions/:sessionId/end` — `INTEGRATION.md` had
+  always documented that a partner "can mark it ended if you have a clean hangup signal," but no
+  endpoint existed to do that (`sessionRepository.markEnded` was written back in Phase 5 and never
+  called by anything). Both are scoped and authorized exactly like the existing session
+  sub-resources (`authorizeActor` + the session-id check in `sessionController.js`).
+  94/94 tests passing; verified live too (transcript retrieval, ending a session).
+
 ## Current task
-Phase 13: conversation/session state polish beyond what Phases 10-12 already built (session
-create/patch/messages and the AI token lifecycle already work end to end) — mainly slot
-normalization helpers an orchestrator can lean on, if any are still missing once Phase 12's
-real usage patterns are accounted for.
+Phase 14: AI action log retrieval for the dashboard (a `GET` endpoint reading a session's
+`ai_actions` trace — the write path has existed and been tested since Phase 12), plus the
+structured `pino` logging with redaction that's been deferred since Phase 10.
 
 ## Next task
-Phase 14: formalize AI action logging beyond "every tool call writes a row" (already true since
-Phase 12) — likely a `GET` endpoint for the dashboard to read a session's `ai_actions` trace, plus
-the structured `pino` logging with redaction that's been deferred since Phase 10.
+Phase 15: expand automated test coverage toward the full checklist in `TESTING.md` (most items are
+already checked off incidentally from Phases 7-13; Phase 15 is about closing the remaining gaps
+deliberately rather than opportunistically).
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -207,8 +221,8 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
       ever calls the same services everything else uses)
 - [x] Backend validates AI tool arguments (zod schemas per tool, verified with malformed/missing
       arguments never reaching the service layer)
-- [x] Conversation/session state works (create/patch-merge/append-message, over HTTP, with real
-      session-scoped auth)
+- [x] Conversation/session state works (create/patch-merge/append-message/list-transcript/end,
+      over HTTP, with real session-scoped auth)
 - [x] AI actions are logged (every tool call, success or failure, writes to `ai_actions` with
       duration/sanitized input/sanitized result — verified live and in
       `tests/integration/aiTools.test.js`; a dashboard-facing read endpoint for this is Phase 14)
@@ -217,7 +231,7 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool
       cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit checks
       against a running server)
-- [x] Automated tests pass (93/93 — `npm test`; more added each phase)
+- [x] Automated tests pass (94/94 — `npm test`; more added each phase)
 - [x] No secrets are committed
 - [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
       verified with cross-tenant *and* cross-session access attempts, live and in the test suite)

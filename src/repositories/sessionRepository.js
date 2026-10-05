@@ -63,4 +63,13 @@ async function appendMessage(sessionId, role, content, executor = pool) {
   );
 }
 
-module.exports = { create, findById, patchState, markEnded, appendMessage };
+/** Full transcript in chronological order — what the dashboard's "AI activity" view reads. */
+async function listMessages(sessionId, executor = pool) {
+  const result = await executor.query(
+    `SELECT role, content, created_at FROM conversation_messages WHERE session_id = $1 ORDER BY created_at ASC`,
+    [sessionId]
+  );
+  return result.rows.map((row) => ({ role: row.role, content: row.content, createdAt: row.created_at }));
+}
+
+module.exports = { create, findById, patchState, markEnded, appendMessage, listMessages };

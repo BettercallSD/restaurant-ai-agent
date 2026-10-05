@@ -57,4 +57,25 @@ const appendMessage = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true });
 });
 
-module.exports = { createSession, getSession, patchSessionState, appendMessage };
+/** The transcript the dashboard's "AI activity" view reads alongside the ai_actions trace. */
+const listMessages = asyncHandler(async (req, res) => {
+  const existing = await sessionRepository.findById(req.params.sessionId);
+  assertCanAccessSession(req, existing);
+  const messages = await sessionRepository.listMessages(req.params.sessionId);
+  res.json({ success: true, messages });
+});
+
+/**
+ * Explicit end-of-call signal (docs/INTEGRATION.md: "or you can mark it ended if you have a clean
+ * hangup signal"). Not required — an un-ended session is simply left ACTIVE indefinitely, which is
+ * the documented default behavior, not a bug — but a partner that *does* know the call ended
+ * cleanly should call this so the dashboard doesn't show a long-finished call as still in progress.
+ */
+const endSession = asyncHandler(async (req, res) => {
+  const existing = await sessionRepository.findById(req.params.sessionId);
+  assertCanAccessSession(req, existing);
+  const updated = await sessionRepository.markEnded(req.params.sessionId, req.body.status);
+  res.json({ success: true, session: formatSession(updated) });
+});
+
+module.exports = { createSession, getSession, patchSessionState, appendMessage, listMessages, endSession };

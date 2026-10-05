@@ -18,4 +18,11 @@ const appendMessageSchema = z.object({
   content: z.string().trim().min(1).max(4000),
 });
 
-module.exports = { createSessionSchema, patchSessionStateSchema, appendMessageSchema };
+// Defaults to COMPLETED: the common case for calling this endpoint at all is a clean hangup
+// signal (docs/INTEGRATION.md) — a partner with a reason to think the call was abandoned passes
+// that explicitly.
+const endSessionSchema = z.object({
+  status: z.enum(['COMPLETED', 'ABANDONED']).default('COMPLETED'),
+});
+
+module.exports = { createSessionSchema, patchSessionStateSchema, appendMessageSchema, endSessionSchema };

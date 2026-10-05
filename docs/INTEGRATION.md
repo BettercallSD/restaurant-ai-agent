@@ -24,8 +24,10 @@ Caller dials restaurant's number
   → POST /api/v1/restaurants/:restaurantId/sessions/:id/messages (same aiToken) to log each turn's
     transcript (optional but recommended — powers the dashboard's "AI activity" view via ai_actions
     + conversation_messages)
-  → on call end: the session is just left to expire (or you can mark it ended if you have a clean
-    hangup signal) — no explicit "close" call is required
+  → on call end: the session is just left ACTIVE indefinitely by default (not a bug — there's no
+    background job expiring it), or, if you have a clean hangup signal, POST
+    /api/v1/restaurants/:restaurantId/sessions/:id/end { status? } ('COMPLETED' by default, or
+    'ABANDONED') so the dashboard doesn't show a finished call as still in progress
 ```
 
 **Important**: the `aiToken` is specific to the session it was issued for. If the same customer

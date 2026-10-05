@@ -59,8 +59,9 @@ required — see `docs/API.md`).
 
 ## Status
 
-Phase 12 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
-API, real authentication/authorization/validation/rate-limiting, and the full AI tool layer (13
-tools, `docs/AI_TOOLS.md`) are built and integration-tested (93 passing tests, including the full
-agentic check→book→confirm flow and live SQL-injection/XSS/mass-assignment/rate-limit/cross-tenant
-checks against a running server). Conversation-state polish and AI-action-log retrieval are next.
+Phase 13 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
+API, real authentication/authorization/validation/rate-limiting, the full AI tool layer (13 tools,
+`docs/AI_TOOLS.md`), and conversation-session state (including transcript retrieval and explicit
+session-end) are built and integration-tested (94 passing tests, including the full agentic
+check→book→confirm flow and live SQL-injection/XSS/mass-assignment/rate-limit/cross-tenant checks
+against a running server). AI-action-log retrieval and structured logging are next.
