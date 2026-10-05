@@ -28,4 +28,9 @@ async function findByPhone(restaurantId, phone, executor = pool) {
   return result.rows[0] ? mapCustomer(result.rows[0]) : null;
 }
 
-module.exports = { findOrCreate, findByPhone };
+async function findById(id, executor = pool) {
+  const result = await executor.query(`SELECT id, restaurant_id, phone, name FROM customers WHERE id = $1`, [id]);
+  return result.rows[0] ? mapCustomer(result.rows[0]) : null;
+}
+
+module.exports = { findOrCreate, findByPhone, findById };

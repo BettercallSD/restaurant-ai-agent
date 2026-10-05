@@ -1,8 +1,9 @@
 # Development Log
 
 ## Current phase
-Phase 15 complete — every item in `TESTING.md`'s required-cases checklist is checked off, and
-closing the last one found a real bug. Starting Phase 16 (finalize partner integration docs).
+Phase 16 complete (partner integration docs verified against the real implementation — found and
+fixed a genuine IDOR gap along the way, not just doc drift). Starting Phase 17 (final security
+audit).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -207,13 +208,38 @@ closing the last one found a real bug. Starting Phase 16 (finalize partner integ
   suite 3 times in a row with zero failures, not just once. 97/97 tests passing, and every item in
   `TESTING.md`'s required-cases checklist is now checked off.
 
-## Current task
-Phase 16: finalize partner integration documentation (`INTEGRATION.md` and `src/tools/schemas.js`
-already exist from Phases 2/12 — Phase 16 is a dedicated pass to make sure nothing drifted).
+- Phase 16: a line-by-line pass of `INTEGRATION.md` and `src/tools/schemas.js` against the actual
+  implementation, not just a skim. The good news first: `schemas.js`'s field names, required/
+  optional markers, and the tool-name-to-URL mapping matched the real `aiToolValidators.js`/routes
+  exactly — a scripted diff found zero drift there. The real find was in `AI_TOOLS.md`'s
+  `get_reservation` entry, which had always documented "must... match customer phone" as an
+  authorization rule — but the actual implementation never checked the phone at all when a
+  `reservationId` was supplied, only restaurant-tenant ownership. That's a genuine IDOR gap, not
+  just stale docs: a reservation id is a UUID and hard to guess, but "hard to guess" isn't the same
+  guarantee as "verified," and the doc had been promising a guarantee the code didn't deliver. Fixed
+  properly rather than just weakening the doc to match: `reservationService.getReservation` now
+  checks the reservation's actual customer phone against a supplied `customerPhone` whenever BOTH
+  are given, while a bare `reservationId` (the staff/dashboard path, and the common AI-orchestrator
+  pattern of looking up something it already created this session) is unaffected — added
+  `customerRepository.findById` to support it. Verified both with a new integration test and live
+  against a running server (wrong phone → 404, right phone → 200, no phone claim → 200).
+  Also fixed a genuinely confusing bit of `INTEGRATION.md`: `idempotencyKey` had been documented as
+  one interchangeable thing, when it's actually two different mechanisms (a JSON body field for AI
+  tool calls, an `Idempotency-Key` HTTP header for the plain REST endpoints) that don't mix — a
+  partner sending it the wrong way for a given endpoint would have it silently stripped by zod
+  rather than working. Spelled this out explicitly instead of leaving it to be discovered the hard
+  way. Also cleaned up two long-dead placeholder error codes in `ERROR_HANDLING.md`
+  (`RESERVATION_LOCKED`, `AWARD_INELIGIBLE`) that existed only to guard against copying the sibling
+  Funtasy League project's categories early on — 16 phases of a clean, stable catalog later, that
+  risk is moot and the placeholders were just clutter. 98/98 tests passing.
 
-## Next task
+## Current task
 Phase 17: the final security audit pass (`SECURITY.md`'s checklist is already nearly all checked
 off incidentally; Phase 17 is a deliberate, skeptical re-verification, not a rubber stamp).
+
+## Next task
+Phase 18: end-to-end testing — a full pass exercising the complete system as a whole rather than
+phase-by-phase, as close to a dry run of the actual hackathon demo as this backend alone can get.
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -264,12 +290,13 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
       duration/sanitized input/sanitized result, and a dashboard-facing `GET .../ai-actions`
       endpoint reads them back — verified live and in `tests/integration/aiTools.test.js` +
       `api.test.js`)
-- [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; `src/tools/schemas.js`
-      now gives the function-calling schemas it promised; finalized further in Phase 16)
+- [x] Partner integration is documented (`INTEGRATION.md` + `src/tools/schemas.js`, verified
+      field-by-field against the real implementation in Phase 16 — a scripted diff found zero drift
+      in the schemas, and the one real gap found was in the prose, not the schemas, and is fixed)
 - [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool/
       logging cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit
       checks and a live grep-for-the-raw-token-in-logs check against a running server)
-- [x] Automated tests pass (97/97 — `npm test`; every `TESTING.md` required case now checked off)
+- [x] Automated tests pass (98/98 — `npm test`; every `TESTING.md` required case now checked off)
 - [x] No secrets are committed
 - [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
       verified with cross-tenant *and* cross-session access attempts, live and in the test suite)

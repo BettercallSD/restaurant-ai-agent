@@ -10,7 +10,8 @@ Caller dials restaurant's number
   → your telephony layer identifies which restaurant that number belongs to
   → POST /api/v1/restaurants/:restaurantId/sessions { customerPhone }   (no auth needed — this IS
       the credential-issuing call, see docs/DECISIONS.md)
-      → backend returns { session: { id, state: {} }, aiToken }
+      → backend returns
+        { session: { id, restaurantId, channel, state: {}, status: 'ACTIVE' }, aiToken }
   → every subsequent call for this session sends Authorization: Bearer <aiToken> — it only
     authorizes this one restaurant and this one session id, nothing else (docs/SECURITY.md)
   → your orchestration loop runs: STT → LLM decides intent/tool → call the matching
@@ -44,11 +45,19 @@ on failure — that's your signal to keep the conversation going instead of conf
 
 ## Idempotency — you must send this
 
-For `create_reservation` and `create_order`, generate a UUID once per logical attempt and send it
-as the `idempotencyKey` field (also usable as the `Idempotency-Key` HTTP header on the equivalent
-plain REST endpoint). If your telephony layer retries a dropped request, resend the **same** key —
-the backend returns the original result instead of creating a duplicate booking/order. Generate a
-**new** key only when the customer is making an actually new request.
+For `create_reservation` and `create_order`, generate a UUID once per logical attempt. **How you
+send it depends on which endpoint family you're calling — these are two different mechanisms, not
+interchangeable:**
+- AI tool calls (`POST /api/v1/ai/tools/create-reservation` / `create-order`): send it as the
+  `idempotencyKey` field in the JSON body.
+- The plain REST endpoints (`POST /api/v1/restaurants/:id/reservations` / `orders`, used by a
+  dashboard or any non-AI client): send it as the `Idempotency-Key` HTTP header instead — the body
+  has no `idempotencyKey` field there, and one would be silently stripped, not accepted.
+
+If your telephony layer retries a dropped request, resend the **same** key (in whichever form that
+endpoint expects) — the backend returns the original result instead of creating a duplicate
+booking/order, even if the retry races the still-in-flight original request. Generate a **new** key
+only when the customer is making an actually new request.
 
 ## Function-calling schemas
 

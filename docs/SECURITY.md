@@ -1,16 +1,17 @@
 # Security
 
-Status: Phases 11-14 implemented authentication, authorization, zod validation, rate limiting, the
-AI tool layer, and structured/redacted logging — the mitigations below marked with a file path are
-live and integration-tested, not just planned. A final audit pass still happens in Phase 17 before
-the "design phase" framing is fully retired.
+Status: Phases 11-16 implemented authentication, authorization, zod validation, rate limiting, the
+AI tool layer, structured/redacted logging, and (Phase 16) a documentation-vs-implementation audit
+that found and fixed a real IDOR gap — the mitigations below marked with a file path are live and
+integration-tested, not just planned. A final audit pass still happens in Phase 17 before the
+"design phase" framing is fully retired.
 
 ## Threat model
 
 | Threat | Mitigation |
 |---|---|
 | SQL injection | No raw SQL concatenation anywhere; every repository query is parameterized (`$1, $2, ...` via `pg`). Verified live with real injection payloads against a running server (`tests/integration/api.test.js`), not just by inspection. |
-| IDOR / cross-tenant access | Every restaurant-owned query is scoped by a `restaurant_id`; `src/middleware/authorizeActor.js` resolves which restaurant(s) the authenticated actor may touch (JWT → `restaurant_users`, or AI session token → its own `restaurantId` claim, further narrowed to its own `sessionId` for session routes — `src/controllers/sessionController.js`) — never from a client-sent field. See `ARCHITECTURE.md`. Cross-tenant lookups return 404, not 403 (`ERROR_HANDLING.md`), verified in `tests/integration/api.test.js`. |
+| IDOR / cross-tenant access | Every restaurant-owned query is scoped by a `restaurant_id`; `src/middleware/authorizeActor.js` resolves which restaurant(s) the authenticated actor may touch (JWT → `restaurant_users`, or AI session token → its own `restaurantId` claim, further narrowed to its own `sessionId` for session routes — `src/controllers/sessionController.js`) — never from a client-sent field. See `ARCHITECTURE.md`. Cross-tenant lookups return 404, not 403 (`ERROR_HANDLING.md`), verified in `tests/integration/api.test.js`. Found and closed a narrower instance of the same class of bug in Phase 16: `get_reservation` (AI tool) resolved a reservation by id scoped only to the restaurant, not the specific customer — a caller who knew (or guessed) a valid reservation id for the right restaurant could read it regardless of whose it was. Fixed so a `customerPhone` asserted alongside a `reservationId` must actually match that reservation's customer, or it's a 404 — `reservationService.getReservation`, tested in `tests/integration/aiTools.test.js`. |
 | Broken authentication | `src/services/authService.js`: bcrypt-hashed passwords + short-lived JWT access tokens (`src/utils/jwt.js`); identical error on wrong password vs. unknown email, so login can't be used to enumerate staff accounts. No passwords for customers/AI callers — an AI session token (`src/controllers/sessionController.js`) is issued per phone call and scoped to one restaurant + one session. |
 | Broken authorization / privilege escalation | Role (`owner`/`manager`/`staff`) checked server-side from `restaurant_users` (`authorizeActor.js`), never from a client-sent role claim. Platform-admin (`users.is_platform_admin`) is a separate, more-privileged flag, also server-side only (not yet wired to any route — no platform-admin endpoints exist yet). |
 | Mass assignment | Two layers: controllers explicitly whitelist fields passed into services (never `createReservation(req.body)`), and zod schemas (`src/validators/`) strip unrecognized fields by default. A client sending `status`/`restaurantId` in a reservation body is silently ignored — verified live (`tests/integration/api.test.js`). |
@@ -18,7 +19,7 @@ the "design phase" framing is fully retired.
 | Arbitrary tool execution | The AI can only invoke the fixed, documented tool endpoints (`AI_TOOLS.md`, 13 routes in `src/routes/aiToolRoutes.js`) — there is no generic "run this SQL" or "call this endpoint" tool, and no `:restaurantId` in any tool's URL or body schema for the AI to redirect a call with. |
 | Tenant data leakage | Response shaping is explicit per endpoint/tool (documented field lists); no endpoint returns a raw database row. AI-facing responses are even narrower than the dashboard-facing REST ones — e.g. `get_reservation`'s tool output returns table *labels* ("T5"), never the raw table ids the plain REST API includes. |
 | Oversized requests | `express.json({ limit: '32kb' })` (tool/API bodies are small structured objects, not files). |
-| Brute force | `src/middleware/rateLimiters.js`: `authLimiter` (10/15min) on `/auth/login`, `sessionCreateLimiter` (30/15min) on the unauthenticated session-creation endpoint, `mutationLimiter` (60/15min) on reservation/order create/modify/cancel. In-memory store, single-instance only — see `DECISIONS.md`/code comments for the multi-instance caveat. Verified live: rapid repeated login attempts get a 429 (`tests/integration/api.test.js`). |
+| Brute force | `src/middleware/rateLimiters.js`: `authLimiter` (10/15min) on `/auth/login`, `sessionCreateLimiter` (30/15min) on the unauthenticated session-creation endpoint, `mutationLimiter` (60/15min) on reservation/order create/modify/cancel, `aiToolLimiter` (300/15min, more generous since one conversation turn can mean several tool calls) on every `/ai/tools/*` endpoint. In-memory store, single-instance only — see `DECISIONS.md`/code comments for the multi-instance caveat. Verified live: rapid repeated login attempts get a 429 (`tests/integration/api.test.js`). |
 | Duplicate state-changing requests | Idempotency keys on reservation/order creation (`DATABASE.md`), integration-tested including a genuine concurrent-request race. |
 | Leaked secrets | All secrets via `.env` (gitignored); `.env.example` has placeholders only; no secret is ever logged. |
 | Verbose production errors | Centralized error handler (`src/middleware/errorHandler.js`) strips internals in every environment (`ERROR_HANDLING.md`). |
@@ -60,7 +61,7 @@ and the available fix requires `jest@30`, a breaking major version bump. Accepte
 tracked v1 risk rather than destabilizing the test runner under hackathon time pressure; re-checked
 in the Phase 17 final audit before declaring the backend complete.
 
-## Interim status after Phase 14 (final pass still happens in Phase 17)
+## Interim status after Phase 16 (final pass still happens in Phase 17)
 
 - [x] No SQL string concatenation
 - [x] Parameterized queries everywhere
@@ -69,7 +70,8 @@ in the Phase 17 final audit before declaring the backend complete.
 - [x] Authentication implemented where required (staff JWT, AI session token)
 - [x] Authorization implemented (`authorizeActor.js`, role lookup, session-scoping)
 - [x] Restaurant tenant isolation (integration-tested, including cross-tenant and cross-session)
-- [x] No IDOR (404, not 403, on a mismatch — verified live and in tests)
+- [x] No IDOR (404, not 403, on a mismatch — verified live and in tests; Phase 16 additionally
+      closed a narrower IDOR gap in `get_reservation`'s phone-matching — see the threat-model row)
 - [x] Input validation (zod schemas on every mutating endpoint + UUID param validation)
 - [x] Mass-assignment protection (whitelisted fields + zod's default key-stripping)
 - [x] Safe error responses

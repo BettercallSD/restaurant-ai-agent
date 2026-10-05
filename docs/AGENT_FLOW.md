@@ -1,6 +1,7 @@
 # Agent Flow
 
-Status: design phase, implemented in Phase 13 (session state) + Phase 12 (tools).
+Status: implemented (Phase 12 tools + Phase 13 session state), integration-tested end to end
+(`tests/integration/aiTools.test.js`'s "full agentic flow" test runs exactly the sequence below).
 
 ## Conversation state shape
 

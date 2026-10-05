@@ -59,10 +59,10 @@ required — see `docs/API.md`).
 
 ## Status
 
-Phase 15 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
+Phase 16 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
 API, real authentication/authorization/validation/rate-limiting, the full AI tool layer (13 tools,
 `docs/AI_TOOLS.md`), conversation-session state, and structured/redacted logging are built and
-integration-tested (97 passing tests — every required case in `docs/TESTING.md` is now checked
-off). Closing the last testing gap found a real idempotency-key race condition, fixed in both the
-reservation and order engines (see `docs/DECISIONS.md`). Finalizing partner integration docs is
-next.
+integration-tested (98 passing tests — every required case in `docs/TESTING.md` is checked off).
+A dedicated Phase 16 audit of the partner integration docs against the real implementation found
+and fixed a genuine IDOR gap in `get_reservation` (see `docs/SECURITY.md`), on top of the Phase 15
+idempotency-key race fix. The final security audit (Phase 17) is next.

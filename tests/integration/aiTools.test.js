@@ -228,6 +228,37 @@ describe('malicious/invalid tool arguments', () => {
     expect(res.status).toBe(404);
   });
 
+  test('knowing a reservationId is not enough on its own to read it under a different phone number', async () => {
+    const date = dayOffset(RUN_BASE_DATE, 3);
+    const ownerPhone = uniquePhone('owner');
+    const created = await callTool('create-reservation', {
+      customerName: 'Real Owner',
+      customerPhone: ownerPhone,
+      date,
+      time: '19:00',
+      partySize: 2,
+      idempotencyKey: `ai-phone-check-${Date.now()}`,
+    });
+    const { reservationId } = created.body;
+
+    // The AI always has the actual caller's phone from the call itself - a caller who is NOT the
+    // reservation's owner, even if they somehow know (or guess) the reservation id, must not be
+    // able to read it just by supplying it.
+    const wrongPhone = await callTool('get-reservation', {
+      reservationId,
+      customerPhone: uniquePhone('intruder'),
+    });
+    expect(wrongPhone.status).toBe(404);
+
+    const rightPhone = await callTool('get-reservation', { reservationId, customerPhone: ownerPhone });
+    expect(rightPhone.status).toBe(200);
+
+    // reservationId alone (no phone claim at all) still works - this is the staff/dashboard-style
+    // lookup path, which legitimately doesn't need to prove phone ownership.
+    const idOnly = await callTool('get-reservation', { reservationId });
+    expect(idOnly.status).toBe(200);
+  });
+
   test('there is no tool that returns bulk customer data', () => {
     const toolNames = [
       'get-restaurant-info',

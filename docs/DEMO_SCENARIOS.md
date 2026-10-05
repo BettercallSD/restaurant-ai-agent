@@ -1,7 +1,10 @@
 # Demo Scenarios
 
-Status: scripted now so Phases 12-13 implement against concrete expected tool-call sequences;
-becomes the literal hackathon demo script once the voice layer is wired up.
+Status: every scenario below is now backed by a real, passing test (not just plausible-sounding —
+actually run against a live Postgres database, several verified live against a running server too).
+This becomes the literal hackathon demo script once the voice layer is wired up; until then, the
+closest equivalent of "running the demo" is `npm test` plus the manual `curl` sequences noted in
+`DEVELOPMENT.md`'s phase log.
 
 1. **Customer books a table.** "Table for 4 tomorrow at 7" → name collected → `check_table_availability`
    (available) → `create_reservation` → confirmed.

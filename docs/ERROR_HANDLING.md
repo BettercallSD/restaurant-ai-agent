@@ -67,19 +67,13 @@ a 403 that would confirm existence-but-wrong-tenant. Where the caller is clearly
 | `RESERVATION_UNAVAILABLE` | no table/combination available at requested time |
 | `INVALID_RESERVATION_TRANSITION` | e.g. attempting CANCELLED → CONFIRMED |
 | `INVALID_ORDER_TRANSITION` | e.g. attempting to cancel a PREPARING order |
-| `RESERVATION_LOCKED` | (reserved for future use, not applicable to this project) |
 | `MENU_ITEM_UNAVAILABLE` | ordering an item with `is_available = false` |
-| `AWARD_INELIGIBLE` | (not applicable to this project) |
 | `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY` | same key, different payload — rejected rather than silently returning the old result |
 | `UNAUTHORIZED` | 401 cases |
 | `FORBIDDEN` | 403 cases |
 | `NOT_FOUND` | 404 cases |
 | `RATE_LIMITED` | 429 cases |
 | `INTERNAL_ERROR` | generic 500 fallback |
-
-Two lines above reference a different project's categories (`RESERVATION_LOCKED`,
-`AWARD_INELIGIBLE`) only to explicitly mark them **not applicable** — this table is restaurant-
-specific and will not grow categories belonging to the Funtasy League scoring system.
 
 ## Unexpected errors
 

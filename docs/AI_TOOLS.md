@@ -62,10 +62,15 @@ business logic exists — they're thin wrappers) → structured, minimal output 
   sharpest on** — the controller only returns `success: true` after the INSERT actually commits.
 
 ## `get_reservation`
-- **Input**: `{ reservationId: uuid }` or `{ customerPhone }` (most recent active one)
-- **Output**: reservation summary (no internal table IDs, no other customers' data)
-- **Authorization**: must belong to the session's resolved restaurant + match customer phone;
-  otherwise 404 (not 403 — see `ERROR_HANDLING.md` IDOR note).
+- **Input**: `{ reservationId: uuid }`, `{ customerPhone }` (most recent active one), or both
+- **Output**: reservation summary (no internal table IDs — table labels like `"T5"` only; no other
+  customers' data)
+- **Authorization**: always tenant-scoped to the session's resolved restaurant. If `customerPhone`
+  is supplied *together with* `reservationId`, it must match that reservation's actual customer —
+  knowing a reservation id is not on its own enough to read it under a different phone claim. A
+  bare `reservationId` with no phone (the orchestrator looking up something it already created this
+  session) is unaffected — this check only activates when a phone is actually asserted. Any
+  mismatch is 404, not 403 (see `ERROR_HANDLING.md`'s IDOR note).
 
 ## `modify_reservation`
 - **Input**: `{ reservationId, date?, time?, partySize? }`

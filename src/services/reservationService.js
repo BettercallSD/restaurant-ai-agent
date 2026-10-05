@@ -137,6 +137,20 @@ async function getReservation(restaurant, { reservationId, customerPhone }) {
     ? await reservationRepository.findByIdForRestaurant(reservationId, restaurant.id)
     : await reservationRepository.findMostRecentActiveByPhone(restaurant.id, customerPhone);
   if (!reservation) throw notFound('Reservation');
+
+  // When the caller supplies BOTH a reservationId and a customerPhone (the AI tool always has the
+  // caller's phone from the call itself — docs/AI_TOOLS.md), verify the reservation actually
+  // belongs to that phone number. Without this, an unguessable-but-known reservation id would be
+  // enough on its own to read someone else's booking; a staff/dashboard lookup (reservationId only,
+  // no customerPhone) is unaffected, since staff legitimately have broader access within their own
+  // restaurant. A mismatch is 404, not 403 (docs/ERROR_HANDLING.md's IDOR note).
+  if (reservationId && customerPhone) {
+    const customer = await customerRepository.findById(reservation.customerId);
+    if (!customer || customer.phone !== customerPhone) {
+      throw notFound('Reservation');
+    }
+  }
+
   return formatByIdWithTables(reservation);
 }
 
