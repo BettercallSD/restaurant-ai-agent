@@ -1,8 +1,8 @@
 # Development Log
 
 ## Current phase
-Phase 10 complete (REST API, integration-tested over real HTTP). Starting Phase 11 (validation,
-auth, rate limiting).
+Phase 11 complete (validation, authentication, authorization, rate limiting — the Phase 10
+security gap is now closed). Starting Phase 12 (AI tool layer).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -105,25 +105,56 @@ auth, rate limiting).
   HTTP server, not just the test suite — SQL injection, XSS, and mass-assignment payloads, all
   handled safely. Full suite: 66/66 passing.
 
+- Phase 11: `src/utils/jwt.js` (two separate secrets — staff vs. AI session, see `DECISIONS.md`),
+  `src/services/authService.js` + `authController.js` + `POST /auth/login` (bcrypt compare,
+  identical error for wrong-password vs. unknown-email so login can't enumerate accounts),
+  `src/middleware/authenticate.js` (resolves `req.actor` from either token type) and
+  `authorizeActor.js` (the actual tenant-authorization check — staff via `restaurant_users` role
+  lookup, AI via its `restaurantId` claim; mismatch is 404, not 403, per the IDOR note in
+  `ERROR_HANDLING.md`). `sessionController.js` now issues the `aiToken` on session creation and
+  additionally scopes session sub-resource routes to that exact session id, not just the
+  restaurant — an AI token for one phone call cannot read a different call's session.
+  `src/middleware/rateLimiters.js` (auth/session-creation/mutation limits).
+  `src/middleware/validateParams.js` (UUID route-param validation — closes a gap where a malformed
+  id would otherwise reach Postgres directly and surface as a raw 500) and real zod schemas in
+  `src/validators/` replacing every ad hoc presence check from Phase 10.
+  **The Phase 10 security gap is now closed** — every route that touches customer data requires
+  authentication, and the authorization check is real (not a stand-in).
+- Rewrote `tests/integration/api.test.js` almost entirely, since nearly every endpoint now needs a
+  real token — added staff login, AI session token issuance/scoping, cross-tenant and
+  cross-session access attempts, a malformed-id-is-400-not-500 check, and a rate-limiting test that
+  genuinely fires requests until a 429 comes back. One bug found along the way, in the *test*, not
+  the backend: the test helper's fake phone numbers were longer than the zod schema's own 20-char
+  limit, so the HTTP-layer tests failed validation the service-layer tests never would have caught
+  (they bypass HTTP entirely). Fixed the helper, not the limit. Full suite: 79/79 passing.
+
 ## Current task
-Phase 11: validation (zod schemas replacing the current minimal presence checks), authentication/
-authorization (staff JWT + AI session tokens, and `resolveRestaurant` upgraded to actually check
-them), centralized rate limiting, and the dashboard-only endpoints deferred from Phase 10 (table/
-menu-item writes, reservation list view).
+Phase 12: the AI tool layer (`/ai/tools/*` endpoints per `AI_TOOLS.md`), now that AI session tokens
+exist to gate them. Each tool endpoint should be a thin wrapper: validate (reusing the same zod
+patterns), call the existing reservation/order services, log to `ai_actions`.
 
 ## Next task
-Phase 12: the AI tool layer (`/ai/tools/*` endpoints per `AI_TOOLS.md`), which depends on Phase
-11's AI session tokens existing first.
+Phase 13: formalize conversation/session state beyond what Phase 10-11 already built (session
+create/patch/messages already work — Phase 13 is about the agent-flow-specific polish, e.g. slot
+normalization helpers for the orchestrator).
 
 ## Known issues
-- **No authentication/authorization yet.** Every `/api/v1/restaurants/:restaurantId/*` route
-  trusts the URL param with no check — this is the single biggest open item and Phase 11's entire
-  focus. Do not demo this as tenant-isolated until that lands.
+- `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
+  endpoint — see `DECISIONS.md`); the compensating control is its own stricter rate limit. A
+  production deployment would gate it behind a restaurant-specific API key for the telephony
+  integration.
+- Rate limiting uses express-rate-limit's in-memory store — correct for a single-instance
+  deployment, but would under-count across multiple instances. A shared store (Redis) would be
+  needed before horizontally scaling.
+- No dashboard staff-write endpoints yet (table/menu-item create/edit, reservation list view) —
+  the auth mechanism they need now exists, they're just not built.
 - Combination-seating caps at 3 tables (`MAX_COMBINED_TABLES`) and searches by brute-force
   combination enumeration — fine at hackathon scale (a handful of tables per restaurant), would
   need a smarter search for a restaurant with dozens of tables.
 - Dev-dependency `braces` (via `jest`) has an open high-severity advisory; tracked in
   `SECURITY.md`, not in the production dependency tree.
+- Logging is currently just `console.error` for unexpected failures — structured, redaction-aware
+  logging (`pino`) is Phase 14, not done yet.
 
 ## Important decisions
 See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricing, Postgres
@@ -144,19 +175,24 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Cancellation works (including idempotent re-cancellation)
 - [x] Orders work (full HTTP path)
 - [x] Menu availability works (unavailable items rejected at order time)
-- [ ] AI tools work (Phase 12)
+- [ ] AI tools work (Phase 12 — the `/ai/tools/*` endpoints themselves; the AI session token that
+      gates them is built and tested)
 - [x] AI cannot directly access the database (true by construction — no code path gives the AI
-      anything but a tool-layer HTTP endpoint; formalized further once Phase 12's tools exist)
-- [ ] Backend validates AI tool arguments (Phase 11 zod schemas / Phase 12 tool endpoints)
-- [x] Conversation/session state works (create/patch-merge/append-message, over HTTP)
-- [ ] AI actions are logged
+      anything but an HTTP endpoint; formalized further once Phase 12's tools exist)
+- [x] Backend validates AI tool arguments (the zod validation pattern is proven on every existing
+      mutating endpoint; Phase 12 reuses it for the tool endpoints themselves)
+- [x] Conversation/session state works (create/patch-merge/append-message, over HTTP, with real
+      session-scoped auth)
+- [ ] AI actions are logged (Phase 14 — `ai_actions` table exists and is used by the Phase 5/6
+      smoke tests, but no live code path writes to it yet)
 - [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; finalized Phase 16)
-- [ ] Security tests pass (full pass is Phase 17; reservation/order/HTTP-layer cases already
-      covered, including live SQL injection/XSS/mass-assignment payloads against a running server)
-- [x] Automated tests pass (66/66 — `npm test`; more added each phase)
+- [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer cases
+      already covered, including live SQL injection/XSS/mass-assignment/rate-limit checks against
+      a running server)
+- [x] Automated tests pass (79/79 — `npm test`; more added each phase)
 - [x] No secrets are committed
-- [ ] Tenant isolation works (data-layer isolation proven; the *authorization* half — verifying
-      the caller may act on this restaurant at all — is Phase 11, see Known Issues)
+- [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
+      verified with cross-tenant *and* cross-session access attempts, live and in the test suite)
 - [x] SQL injection protection works (every query in the codebase is parameterized; verified live
       with real injection payloads against the running server, not just by inspection)
 - [x] Duplicate requests are handled (idempotency keys, reservations and orders)
@@ -165,5 +201,4 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
       this phase to match what was actually built, including two real gaps caught and fixed along
       the way — see above)
 - [x] Fresh setup is documented (README.md has the real, verified commands)
-- [ ] A new developer can clone, configure `.env`, migrate/seed, start, and test from the README
-      (true for everyone except Phase 11's not-yet-existing auth step)
+- [x] A new developer can clone, configure `.env`, migrate/seed, start, and test from the README

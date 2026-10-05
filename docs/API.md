@@ -1,67 +1,81 @@
 # API
 
-Status: Phase 10 implemented the routes below (restaurant/menu/tables, reservations, orders,
-sessions) and verified each one against a real Postgres test database via Supertest
-(`tests/integration/api.test.js`). **No authentication exists yet** — every route resolves the
-restaurant purely from the URL's `:restaurantId` with no check that the caller is allowed to act
-on it (see the ⚠️ warning in `src/middleware/resolveRestaurant.js`). Auth, the `Idempotency-Key`→
-zod-schema upgrade, and the `/auth/login` + AI-tool endpoints below land in Phase 11/12 — don't
-treat this surface as tenant-isolated until then. This file is updated again once that lands.
+Status: Phases 10-11 implemented the routes below, with real authentication/authorization, zod
+validation, and rate limiting — verified against a real Postgres test database via Supertest
+(`tests/integration/api.test.js`) and manually against a running server (login, token reuse,
+cross-tenant and cross-session access attempts, injection/XSS/mass-assignment payloads).
 
 Base path: `/api/v1`. All request/response bodies are JSON. Resources are nested under the
 restaurant they belong to: `/restaurants/:restaurantId/...`.
 
-## Health
-- `GET /health` (outside `/api/v1`) — liveness check, no restaurant scope. `{ success: true, status: "ok" }`.
+## Auth
+- `POST /auth/login` — `{ email, password }` → `{ success, token, user, restaurants }`.
+  Rate-limited (10/15min). Same `UNAUTHORIZED` error for a wrong password or an unknown email — a
+  login attempt never reveals which one.
 
-## Restaurant / menu / tables (implemented, read-only)
+Protected routes take `Authorization: Bearer <token>` — either a staff JWT from `/auth/login`, or
+an AI session token (`aiToken`) from creating a session (see below). See `SECURITY.md` for the
+full authorization model.
+
+## Health
+- `GET /health` (outside `/api/v1`) — liveness check, no restaurant scope, no auth.
+  `{ success: true, status: "ok" }`.
+
+## Restaurant / menu / tables — public, no auth
+A restaurant's own info/menu/tables are treated like its public website (`DECISIONS.md`).
 - `GET /restaurants/:restaurantId` → `{ success, restaurant: { id, name, phone, address, openingHours, timezone } }`
 - `GET /restaurants/:restaurantId/tables` → `{ success, tables: [{ id, label, capacity }] }`
 - `GET /restaurants/:restaurantId/menu` (optional `?categoryId=`) →
   `{ success, categories: [{ id, name, items: [{ id, name, description, priceCents, isAvailable }] }] }`
 
-Staff-only writes (`POST .../tables`, `POST .../menu-items`, `PATCH .../menu-items/:id`) are
-intentionally **not built yet** — building a mutation endpoint before auth exists would let anyone
-edit any restaurant's menu, which is worse than not having the endpoint. They land with Phase 11.
+Staff-only writes (`POST .../tables`, `POST .../menu-items`, `PATCH .../menu-items/:id`) and a
+dashboard reservation-list view aren't built yet — they're the next thing this auth layer enables,
+not blocked on anything further; just not required to demo the agentic core.
 
-## Reservations (implemented)
+## Reservations — requires auth
+`Authorization: Bearer <token>` required (staff JWT, with a `restaurant_users` row for this
+restaurant; or an AI session token issued for this restaurant). Rate-limited (60/15min on
+create/modify/cancel).
 - `POST /restaurants/:restaurantId/reservations` — requires `Idempotency-Key` header.
-  Body: `{ customer: { phone, name? }, date, time, partySize, specialRequests? }`.
+  Body: `{ customer: { phone, name? }, date, time, partySize, specialRequests? }` (zod-validated:
+  `date` must be `YYYY-MM-DD`, `time` must be `HH:mm`, `partySize` 1-50).
   → 201 `{ success, reservation: { id, status, date, time, partySize, specialRequests, tables } }`,
-  or 409 `RESERVATION_UNAVAILABLE` with an `alternatives` array (see `ERROR_HANDLING.md`).
+  or 409 `RESERVATION_UNAVAILABLE` with an `alternatives` array.
 - `GET /restaurants/:restaurantId/reservations/:reservationId`
 - `PATCH /restaurants/:restaurantId/reservations/:reservationId` — any of `{ date, time, partySize }`
 - `POST /restaurants/:restaurantId/reservations/:reservationId/cancel` — idempotent
 
-A dashboard list view (`GET .../reservations?date=`) is deferred to Phase 11 along with staff auth,
-since "list every reservation" is exactly the kind of endpoint that must not be open to anyone.
-
-## Orders (implemented)
+## Orders — requires auth
+Same auth/rate-limit model as reservations.
 - `POST /restaurants/:restaurantId/orders` — requires `Idempotency-Key` header.
-  Body: `{ customer: { phone, name? }, items: [{ menuItemId, quantity }], reservationId? }`.
+  Body: `{ customer: { phone, name? }, items: [{ menuItemId, quantity }], reservationId? }`
+  (`menuItemId`/`reservationId` must be valid UUIDs; `quantity` 1-20).
   → 201 `{ success, order: { id, status, reservationId, items, subtotalCents, totalCents } }`
 - `GET /restaurants/:restaurantId/orders/:orderId`
 - `PATCH /restaurants/:restaurantId/orders/:orderId` — `{ items: [...] }` (full replacement, only while `PENDING`)
 - `POST /restaurants/:restaurantId/orders/:orderId/cancel` — idempotent
 
-## Conversation sessions (implemented; used by the AI orchestrator)
-- `POST /restaurants/:restaurantId/sessions` — body: `{ customerPhone?, channel? }` →
-  `{ success, session: { id, restaurantId, channel, state, status } }`. **Phase 11** adds the
-  session-scoped AI token to this response and requires it on subsequent calls.
-- `GET /restaurants/:restaurantId/sessions/:sessionId`
+## Conversation sessions — creation is public, everything else requires auth
+- `POST /restaurants/:restaurantId/sessions` — **no auth required** (it's the credential-issuing
+  endpoint — see `DECISIONS.md`). Rate-limited (30/15min). Body: `{ customerPhone?, channel? }` →
+  `{ success, session: { id, restaurantId, channel, state, status }, aiToken }`.
+- `GET /restaurants/:restaurantId/sessions/:sessionId` — requires the `aiToken` this exact session
+  was issued (or a staff JWT for this restaurant); a different session's `aiToken` gets 404, not
+  this session's data.
 - `PATCH /restaurants/:restaurantId/sessions/:sessionId` — `{ state: { ...fields to merge } }`
 - `POST /restaurants/:restaurantId/sessions/:sessionId/messages` — `{ role, content }`
 
 ## Not yet built
-- `POST /auth/login` (staff email+password → JWT) — Phase 11
-- `GET /restaurants/:id/reservations` dashboard list — Phase 11 (needs staff auth)
-- `POST`/`PATCH` on tables and menu items — Phase 11 (needs staff auth)
+- `GET /restaurants/:id/reservations` dashboard list view (needs no new auth — the mechanism
+  exists — just not built yet)
+- `POST`/`PATCH` on tables and menu items (staff-only; same note)
 - `/ai/tools/*` — Phase 12; contracts already specified in `AI_TOOLS.md`
 
 ## Example (as implemented)
 
 ```
 POST /api/v1/restaurants/dcadba63-.../reservations
+Authorization: Bearer eyJhbGciOi...
 Idempotency-Key: 3f9c2e1a-...
 Content-Type: application/json
 

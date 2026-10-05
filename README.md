@@ -52,12 +52,14 @@ Verify it's up: `curl http://localhost:3000/health` → `{"success":true,"status
 npm test                    # migrates + seeds DATABASE_URL_TEST, then runs the full test suite
 ```
 
-**⚠️ No authentication exists yet** (Phase 11, in progress) — every restaurant-scoped endpoint
-currently trusts the `:restaurantId` in the URL with no check that the caller may act on it. See
-`docs/DEVELOPMENT.md`'s Known Issues before treating this as a secured multi-tenant API.
+Reservation/order endpoints require `Authorization: Bearer <token>` — either a staff JWT from
+`POST /api/v1/auth/login` (seeded login: `owner@himalayanbites.test` / `ChangeMe123!`), or the
+`aiToken` returned by creating a session (`POST /api/v1/restaurants/:id/sessions`, no auth
+required — see `docs/API.md`).
 
 ## Status
 
-Phase 10 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, and the
-REST API are built and integration-tested (66 passing tests, including live SQL-injection/XSS/
-mass-assignment checks against a running server). Authentication/authorization is next.
+Phase 11 of 18 complete (see `docs/DEVELOPMENT.md`) — database, reservation/order engines, the REST
+API, and real authentication/authorization/validation/rate-limiting are built and integration-
+tested (79 passing tests, including live SQL-injection/XSS/mass-assignment/rate-limit checks and
+cross-tenant/cross-session access attempts against a running server). The AI tool layer is next.

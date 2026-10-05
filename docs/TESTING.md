@@ -28,27 +28,32 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 - [x] Modification (valid, re-checks availability)
 - [x] Valid order (priced from the database, a smuggled client-side price field ignored)
 - [x] Unavailable menu item → rejected
-- [x] Invalid quantity (0, negative — unit-tested in Phase 6; over-max bound enforced once the
-      Phase 11 zod schema lands)
-- [ ] Unauthorized request (no/invalid token)
-- [x] Cross-restaurant access attempt → 404 at the service layer (`tenant isolation` suite).
-      Full HTTP-layer version (restaurant A's token against restaurant B's resource) lands with
-      Phase 11 auth.
-- [ ] SQL injection attempt in a text field (`' OR '1'='1`, `" OR "1"="1`) → treated as literal
-      string data, no behavior change
-- [ ] XSS payload in a text field (`<script>alert(1)</script>`) → stored/returned as literal text,
-      never executed anywhere (this is an API, so the real assertion is "returned verbatim as a
-      JSON string, not interpreted")
-- [ ] Path traversal attempt in an id-like field (`../../etc/passwd`) → fails UUID validation, 400
+- [x] Invalid quantity (0, negative, over-max) — unit-tested in Phase 6 and enforced by the Phase
+      11 zod schema (1-20) at the HTTP layer
+- [x] Unauthorized request (no/invalid/garbage/expired token) → 401, verified live and in
+      `tests/integration/api.test.js`
+- [x] Cross-restaurant access attempt → 404, both at the service layer and the full HTTP layer (a
+      valid staff token for restaurant A used against restaurant B's resource; a valid AI session
+      token for one session used to read a *different* session's data — `authorizeActor.js` /
+      `sessionController.js`)
+- [x] SQL injection attempt in a text field (`' OR '1'='1`, a `DROP TABLE` payload in a name field)
+      → treated as literal string data, no behavior change — verified live against a running
+      server, not just asserted
+- [x] XSS payload in a text field (`<script>alert(1)</script>`) → stored/returned as literal text,
+      verified it comes back verbatim as a JSON string value
+- [x] Path traversal / malformed-id attempt in an id-like field (`../../etc/passwd`, `not-a-uuid`)
+      → fails zod UUID validation, 400 (not a raw Postgres error) — both route params
+      (`validateUuidParam`) and body fields (`menuItemId`, `reservationId`)
 - [x] Negative quantity on an order (unavailable item, unknown item id, and idempotency
       replay/mismatch all covered in `tests/integration/orderEngine.test.js`)
-- [ ] Invalid/malformed ids (non-UUID strings)
-- [ ] Unexpected extra fields in a request body (mass-assignment attempt, e.g. a client trying to
-      set `status` or `restaurantId` directly) → ignored, not applied
+- [x] Invalid/malformed ids (non-UUID strings) — see path traversal row above
+- [x] Unexpected extra fields in a request body (mass-assignment attempt, e.g. a client trying to
+      set `status` or `restaurantId` directly) → silently stripped by zod, verified live
 - [ ] Duplicate state-changing request without an idempotency key racing itself (two concurrent
       identical creates) → exactly one reservation/order row survives
 - [ ] Invalid AI tool arguments (wrong types, missing required fields) → `VALIDATION_ERROR`, no
-      service/repository code reached (Phase 11/12 — needs the zod schemas and tool endpoints)
+      service/repository code reached (Phase 12 — needs the tool endpoints themselves; the zod
+      validation pattern they'll reuse is already proven on the plain REST endpoints)
 - [x] Concurrent reservation attempt for the same table/slot → exactly one succeeds, the other
       gets `RESERVATION_UNAVAILABLE`. Verified with a genuine `Promise.allSettled` race against a
       real Postgres connection pool (not mocked) in

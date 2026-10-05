@@ -3,14 +3,12 @@ const { notFound } = require('../errors/AppError');
 const { asyncHandler } = require('./asyncHandler');
 
 /**
- * ⚠️ TEMPORARY, Phase 10 only. This loads the restaurant purely from the URL's `:restaurantId`
- * with NO authorization check — it does not verify the caller is actually allowed to act on this
- * restaurant. Phase 11 inserts an auth middleware before this one (staff JWT -> restaurant_users,
- * or an AI session token -> conversation_sessions.restaurant_id) and this function changes to
- * cross-check the path param against what that middleware resolved, rejecting a mismatch with 403
- * rather than trusting the path blindly — see docs/ARCHITECTURE.md's multi-tenant security
- * boundary. Until Phase 11 lands, these routes are NOT tenant-isolated: anyone who can guess or
- * enumerate a restaurant id can act on it. Tracked in docs/DEVELOPMENT.md "Known issues".
+ * Loads the restaurant named by the URL's `:restaurantId` onto `req.restaurant`, 404ing if it
+ * doesn't exist or is inactive. This is purely "does this restaurant exist" — it does NOT check
+ * whether the caller may act on it. For public read routes (restaurant info, menu, tables) that's
+ * the whole story. For anything else, this middleware is followed by `authenticate` +
+ * `authorizeActor`, which add the actual multi-tenant authorization check on top (see
+ * docs/ARCHITECTURE.md) — don't use this alone to guard a sensitive route.
  */
 const resolveRestaurant = asyncHandler(async (req, res, next) => {
   const restaurant = await restaurantRepository.findById(req.params.restaurantId);

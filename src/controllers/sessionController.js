@@ -1,6 +1,7 @@
 const sessionRepository = require('../repositories/sessionRepository');
 const { asyncHandler } = require('../middleware/asyncHandler');
-const { notFound, validationError } = require('../errors/AppError');
+const { notFound } = require('../errors/AppError');
+const { signAiSessionToken } = require('../utils/jwt');
 
 const formatSession = (session) => ({
   id: session.id,
@@ -11,46 +12,48 @@ const formatSession = (session) => ({
 });
 
 /**
- * ⚠️ Phase 10 only: anyone who can call this endpoint can open a session for any restaurant id.
- * Phase 11 issues the actual session-scoped AI token here and requires it on every subsequent
- * tool call — see docs/SECURITY.md's "AI orchestration" auth model. Until then this is plumbing,
- * not a security boundary.
+ * Public (no auth) by design — this is the credential-issuing endpoint. Everything that acts on
+ * an existing session requires the `aiToken` this returns; see docs/DECISIONS.md.
  */
 const createSession = asyncHandler(async (req, res) => {
-  const { customerPhone, channel } = req.body ?? {};
+  const { customerPhone, channel } = req.body;
   const session = await sessionRepository.create(req.restaurant.id, customerPhone, channel || 'voice');
-  res.status(201).json({ success: true, session: formatSession(session) });
+  const aiToken = signAiSessionToken({ sessionId: session.id, restaurantId: req.restaurant.id });
+  res.status(201).json({ success: true, session: formatSession(session), aiToken });
 });
+
+/**
+ * Beyond `authorizeActor`'s restaurant-level check, an AI actor must also be scoped to THIS
+ * specific session — otherwise any session token for a restaurant could read every other call's
+ * session under the same restaurant, not just its own. Staff aren't restricted this way: a
+ * dashboard user authorized for the restaurant can look at any of its sessions.
+ */
+function assertCanAccessSession(req, session) {
+  if (!session || session.restaurantId !== req.restaurant.id) throw notFound('Session');
+  if (req.actor.type === 'ai' && req.actor.sessionId !== session.id) throw notFound('Session');
+}
 
 const getSession = asyncHandler(async (req, res) => {
   const session = await sessionRepository.findById(req.params.sessionId);
-  if (!session || session.restaurantId !== req.restaurant.id) throw notFound('Session');
+  assertCanAccessSession(req, session);
   res.json({ success: true, session: formatSession(session) });
 });
 
 const patchSessionState = asyncHandler(async (req, res) => {
   const existing = await sessionRepository.findById(req.params.sessionId);
-  if (!existing || existing.restaurantId !== req.restaurant.id) throw notFound('Session');
-
-  const patch = req.body?.state;
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
-    throw validationError('Request body must be { "state": { ...fields to merge } }.');
-  }
-  const updated = await sessionRepository.patchState(req.params.sessionId, patch);
+  assertCanAccessSession(req, existing);
+  const updated = await sessionRepository.patchState(req.params.sessionId, req.body.state);
   res.json({ success: true, session: formatSession(updated) });
 });
 
 const appendMessage = asyncHandler(async (req, res) => {
   const existing = await sessionRepository.findById(req.params.sessionId);
-  if (!existing || existing.restaurantId !== req.restaurant.id) throw notFound('Session');
-
-  const { role, content } = req.body ?? {};
-  if (!['customer', 'ai', 'system'].includes(role) || typeof content !== 'string' || !content.trim()) {
-    throw validationError('role must be one of customer/ai/system, and content must be non-empty text.');
-  }
-  // content is stored and later returned verbatim as a JSON string field, never rendered as HTML
-  // anywhere in this API (docs/SECURITY.md) — no sanitization needed here, only a length cap.
-  await sessionRepository.appendMessage(req.params.sessionId, role, content.slice(0, 4000));
+  assertCanAccessSession(req, existing);
+  const { role, content } = req.body;
+  // Stored and later returned verbatim as a JSON string field, never rendered as HTML anywhere in
+  // this API (docs/SECURITY.md) — no sanitization needed, length bound is already enforced by the
+  // zod schema.
+  await sessionRepository.appendMessage(req.params.sessionId, role, content);
   res.status(201).json({ success: true });
 });
 

@@ -8,20 +8,28 @@ you need is the tool/API shapes below and in `AI_TOOLS.md` / `API.md`.
 ```
 Caller dials restaurant's number
   → your telephony layer identifies which restaurant that number belongs to
-  → POST /api/v1/restaurants/:restaurantId/sessions { customerPhone }
-      → backend returns { session: { id, state: {} } } (Phase 11 adds an aiToken here too)
+  → POST /api/v1/restaurants/:restaurantId/sessions { customerPhone }   (no auth needed — this IS
+      the credential-issuing call, see docs/DECISIONS.md)
+      → backend returns { session: { id, state: {} }, aiToken }
+  → every subsequent call for this session sends Authorization: Bearer <aiToken> — it only
+    authorizes this one restaurant and this one session id, nothing else (docs/SECURITY.md)
   → your orchestration loop runs: STT → LLM decides intent/tool → call the matching
-    /api/v1/ai/tools/* endpoint (Phase 12) with Authorization: Bearer <aiToken>
+    /api/v1/ai/tools/* endpoint (Phase 12 — not built yet; use the plain REST endpoints in API.md
+    with the aiToken in the meantime, e.g. POST .../reservations) with that Authorization header
   → backend returns a structured JSON result (never prose) — your LLM turns that into speech via TTS
   → as slots get filled (date, time, partySize, name, ...), PATCH
-    /api/v1/restaurants/:restaurantId/sessions/:id { state: {...} } with the new fields so you
-    don't have to carry state yourself between turns
-  → POST /api/v1/restaurants/:restaurantId/sessions/:id/messages to log each turn's transcript
-    (optional but recommended — powers the dashboard's "AI activity" view via ai_actions +
-    conversation_messages)
+    /api/v1/restaurants/:restaurantId/sessions/:id { state: {...} } (same aiToken) with the new
+    fields so you don't have to carry state yourself between turns
+  → POST /api/v1/restaurants/:restaurantId/sessions/:id/messages (same aiToken) to log each turn's
+    transcript (optional but recommended — powers the dashboard's "AI activity" view via ai_actions
+    + conversation_messages)
   → on call end: the session is just left to expire (or you can mark it ended if you have a clean
     hangup signal) — no explicit "close" call is required
 ```
+
+**Important**: the `aiToken` is specific to the session it was issued for. If the same customer
+calls back later, that's a *new* session (new `POST .../sessions` call) with its own new
+`aiToken` — don't try to reuse an old one across calls.
 
 ## Hard rule your orchestrator must follow
 

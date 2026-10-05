@@ -2,6 +2,34 @@
 
 Architecture Decision Record. Newest first.
 
+## Session creation is public; everything else requires auth
+
+**Decision**: `POST /restaurants/:id/sessions` has no authentication — it's reachable with no
+token at all, scoped only by the restaurant id in the URL. Every other session route (`GET`,
+`PATCH`, `POST .../messages`), and every reservation/order route, requires an `Authorization:
+Bearer` token (a staff JWT or the AI session token this endpoint issues).
+
+**Why**: this endpoint's entire job is to issue the credential (`aiToken`) everything downstream
+checks — there's no token to present yet when a call first comes in, the same way a login endpoint
+can't itself require being logged in. The real security boundary here is the assumption that only
+the partner's own trusted telephony/orchestration backend calls this endpoint server-to-server,
+not the untrusted AI or a public client. A production deployment would gate it behind a
+restaurant-specific API key issued to that integration; building a whole second API-key auth
+system was judged out of scope for the hackathon on top of staff JWT + AI session tokens, which
+`SECURITY.md` already commits to as the two auth mechanisms. `sessionCreateLimiter` (a stricter
+rate limit than other endpoints) is the compensating control in the meantime.
+
+## Two JWT secrets, not one
+
+**Decision**: staff JWTs are signed with `JWT_SECRET`; AI session tokens are signed with a
+separate `AI_SESSION_SECRET`.
+
+**Why**: the two tokens mean very different things — "this is an authenticated dashboard user" vs
+"this is the orchestrator for one specific phone call, scoped to one restaurant and (for session
+routes) one session id". Using one secret for both would mean a bug that accepts one token type
+somewhere it shouldn't could cross those boundaries. With separate secrets, `authenticate.js` can
+even use *which* secret verifies a token as the signal for which kind of actor it is.
+
 ## No ORM — raw `pg` with parameterized queries
 
 **Decision**: Use `pg` directly with hand-written parameterized SQL in the repository layer, no
