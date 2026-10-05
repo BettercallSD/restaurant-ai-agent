@@ -19,4 +19,4 @@ const modifyOrderSchema = z.object({
   items: z.array(orderItemSchema).min(1, 'An order must have at least one item.'),
 });
 
-module.exports = { createOrderSchema, modifyOrderSchema };
+module.exports = { orderItemSchema, createOrderSchema, modifyOrderSchema };

@@ -34,4 +34,14 @@ async function lockByIds(tableIds, client) {
   return result.rows.map((row) => ({ id: row.id, capacity: row.capacity }));
 }
 
-module.exports = { listActive, lockByIds };
+/** Full table details (label, capacity) for a known set of ids — e.g. displaying a reservation's
+ * assigned tables, where only the bare ids were persisted in `reservation_tables`. */
+async function findByIds(tableIds, executor = pool) {
+  if (tableIds.length === 0) return [];
+  const result = await executor.query(`SELECT id, label, capacity FROM tables WHERE id = ANY($1::uuid[])`, [
+    tableIds,
+  ]);
+  return result.rows.map(mapTable);
+}
+
+module.exports = { listActive, lockByIds, findByIds };

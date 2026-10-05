@@ -1,8 +1,8 @@
 # Development Log
 
 ## Current phase
-Phase 11 complete (validation, authentication, authorization, rate limiting — the Phase 10
-security gap is now closed). Starting Phase 12 (AI tool layer).
+Phase 12 complete (AI tool layer — the full agentic check→book→confirm flow is live and
+integration-tested). Starting Phase 13 (conversation/session state polish).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -128,15 +128,41 @@ security gap is now closed). Starting Phase 12 (AI tool layer).
   limit, so the HTTP-layer tests failed validation the service-layer tests never would have caught
   (they bypass HTTP entirely). Fixed the helper, not the limit. Full suite: 79/79 passing.
 
+- Phase 12: `src/validators/aiToolValidators.js` (one zod schema per tool, reusing `orderItemSchema`
+  and the shared `common.js` primitives rather than redefining them), `src/middleware/
+  requireAiActor.js` (rejects a staff JWT with 403 — tool endpoints are AI-only; resolves the
+  restaurant from the token's claim, not a URL param, since these routes have no `:restaurantId` at
+  all — nothing for a prompt-injected "pretend this is restaurant X" to even target),
+  `src/controllers/aiToolController.js` (13 thin handlers behind one `tool()` wrapper that logs
+  every call — success or failure — to `ai_actions` with duration, sanitized input, and sanitized
+  result), `src/routes/aiToolRoutes.js`, and `src/tools/schemas.js` (the OpenAI-style
+  function-calling JSON Schemas promised to the partner back in Phase 2's `INTEGRATION.md` but
+  never actually written until now — caught while updating that doc for this phase).
+  AI-facing responses are narrower than the equivalent REST ones on purpose: `get_reservation`
+  returns table *labels* ("T5"), never the raw table ids the dashboard-facing REST endpoint
+  includes — keeps to "never send unnecessary data to the AI."
+  Found and fixed a real Phase-7-era gap along the way: `reservationService.getReservation` (and
+  the idempotency-replay path in `createReservation`) only ever fetched bare table *ids* for a
+  reservation, never looked up their labels/capacity — invisible until a test actually asserted on
+  `tables[].label`, since `create`/`modify` happen to return the allocation result directly and
+  never hit that code path. Fixed by adding `tableRepository.findByIds`.
+  Added `tests/integration/aiTools.test.js` (18 tests) covering the full agentic flow end to end:
+  check availability → book → confirm, staff-JWT rejection, cross-tenant/cross-session 404s, the
+  "never claim success the backend didn't confirm" guarantee (fill every table, then assert the
+  next booking attempt gets `RESERVATION_UNAVAILABLE` with alternatives, not a false 200), DB-priced
+  orders ignoring a smuggled price, and `transfer_to_human`. Verified live against a running server
+  too. Full suite: 93/93 passing.
+
 ## Current task
-Phase 12: the AI tool layer (`/ai/tools/*` endpoints per `AI_TOOLS.md`), now that AI session tokens
-exist to gate them. Each tool endpoint should be a thin wrapper: validate (reusing the same zod
-patterns), call the existing reservation/order services, log to `ai_actions`.
+Phase 13: conversation/session state polish beyond what Phases 10-12 already built (session
+create/patch/messages and the AI token lifecycle already work end to end) — mainly slot
+normalization helpers an orchestrator can lean on, if any are still missing once Phase 12's
+real usage patterns are accounted for.
 
 ## Next task
-Phase 13: formalize conversation/session state beyond what Phase 10-11 already built (session
-create/patch/messages already work — Phase 13 is about the agent-flow-specific polish, e.g. slot
-normalization helpers for the orchestrator).
+Phase 14: formalize AI action logging beyond "every tool call writes a row" (already true since
+Phase 12) — likely a `GET` endpoint for the dashboard to read a session's `ai_actions` trace, plus
+the structured `pino` logging with redaction that's been deferred since Phase 10.
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -175,21 +201,23 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Cancellation works (including idempotent re-cancellation)
 - [x] Orders work (full HTTP path)
 - [x] Menu availability works (unavailable items rejected at order time)
-- [ ] AI tools work (Phase 12 — the `/ai/tools/*` endpoints themselves; the AI session token that
-      gates them is built and tested)
-- [x] AI cannot directly access the database (true by construction — no code path gives the AI
-      anything but an HTTP endpoint; formalized further once Phase 12's tools exist)
-- [x] Backend validates AI tool arguments (the zod validation pattern is proven on every existing
-      mutating endpoint; Phase 12 reuses it for the tool endpoints themselves)
+- [x] AI tools work (all 13 tools from `AI_TOOLS.md`, live over HTTP, integration-tested including
+      the full check→book→confirm agentic flow)
+- [x] AI cannot directly access the database (true by construction — `aiToolController.js` only
+      ever calls the same services everything else uses)
+- [x] Backend validates AI tool arguments (zod schemas per tool, verified with malformed/missing
+      arguments never reaching the service layer)
 - [x] Conversation/session state works (create/patch-merge/append-message, over HTTP, with real
       session-scoped auth)
-- [ ] AI actions are logged (Phase 14 — `ai_actions` table exists and is used by the Phase 5/6
-      smoke tests, but no live code path writes to it yet)
-- [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; finalized Phase 16)
-- [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer cases
-      already covered, including live SQL injection/XSS/mass-assignment/rate-limit checks against
-      a running server)
-- [x] Automated tests pass (79/79 — `npm test`; more added each phase)
+- [x] AI actions are logged (every tool call, success or failure, writes to `ai_actions` with
+      duration/sanitized input/sanitized result — verified live and in
+      `tests/integration/aiTools.test.js`; a dashboard-facing read endpoint for this is Phase 14)
+- [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; `src/tools/schemas.js`
+      now gives the function-calling schemas it promised; finalized further in Phase 16)
+- [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool
+      cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit checks
+      against a running server)
+- [x] Automated tests pass (93/93 — `npm test`; more added each phase)
 - [x] No secrets are committed
 - [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
       verified with cross-tenant *and* cross-session access attempts, live and in the test suite)

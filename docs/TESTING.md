@@ -51,9 +51,14 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
       set `status` or `restaurantId` directly) → silently stripped by zod, verified live
 - [ ] Duplicate state-changing request without an idempotency key racing itself (two concurrent
       identical creates) → exactly one reservation/order row survives
-- [ ] Invalid AI tool arguments (wrong types, missing required fields) → `VALIDATION_ERROR`, no
-      service/repository code reached (Phase 12 — needs the tool endpoints themselves; the zod
-      validation pattern they'll reuse is already proven on the plain REST endpoints)
+- [x] Invalid AI tool arguments (wrong types, missing required fields) → `VALIDATION_ERROR`, no
+      service/repository code reached — `tests/integration/aiTools.test.js`
+- [x] A staff JWT against an AI tool endpoint is rejected (403) — tool endpoints are AI-only
+- [x] AI tool authorization/tenant isolation — a reservation id for a different restaurant 404s
+      through the tool layer the same as through the plain REST API
+- [x] AI never gets a success response for an action the backend didn't actually confirm — proven
+      by the overflow-booking test in `aiTools.test.js` (every table deliberately filled first,
+      then `create_reservation` asserted to return 409 with alternatives, never a false 200)
 - [x] Concurrent reservation attempt for the same table/slot → exactly one succeeds, the other
       gets `RESERVATION_UNAVAILABLE`. Verified with a genuine `Promise.allSettled` race against a
       real Postgres connection pool (not mocked) in

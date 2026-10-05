@@ -1,9 +1,10 @@
 # API
 
-Status: Phases 10-11 implemented the routes below, with real authentication/authorization, zod
-validation, and rate limiting — verified against a real Postgres test database via Supertest
-(`tests/integration/api.test.js`) and manually against a running server (login, token reuse,
-cross-tenant and cross-session access attempts, injection/XSS/mass-assignment payloads).
+Status: Phases 10-12 implemented the routes below, with real authentication/authorization, zod
+validation, rate limiting, and the AI tool layer — verified against a real Postgres test database
+via Supertest (`tests/integration/*.test.js`) and manually against a running server (login, token
+reuse, cross-tenant and cross-session access attempts, injection/XSS/mass-assignment payloads, the
+full agentic check→book→confirm flow).
 
 Base path: `/api/v1`. All request/response bodies are JSON. Resources are nested under the
 restaurant they belong to: `/restaurants/:restaurantId/...`.
@@ -65,11 +66,20 @@ Same auth/rate-limit model as reservations.
 - `PATCH /restaurants/:restaurantId/sessions/:sessionId` — `{ state: { ...fields to merge } }`
 - `POST /restaurants/:restaurantId/sessions/:sessionId/messages` — `{ role, content }`
 
+## AI tools — AI session token only (staff JWT rejected with 403)
+`POST /api/v1/ai/tools/<tool-name>`, one per tool in `AI_TOOLS.md` (`get-restaurant-info`,
+`get-menu`, `check-item-availability`, `check-table-availability`, `find-alternative-times`,
+`create-reservation`, `get-reservation`, `modify-reservation`, `cancel-reservation`,
+`create-order`, `modify-order`, `cancel-order`, `transfer-to-human`). No `:restaurantId` in the
+URL — it comes entirely from the AI session token, so there's no argument anywhere that could
+redirect a call to a different restaurant. Rate-limited (300/15min — a single conversation turn
+can involve several tool calls). Every call is logged to `ai_actions`, success or failure. See
+`AI_TOOLS.md` for each tool's exact input/output shape.
+
 ## Not yet built
 - `GET /restaurants/:id/reservations` dashboard list view (needs no new auth — the mechanism
   exists — just not built yet)
 - `POST`/`PATCH` on tables and menu items (staff-only; same note)
-- `/ai/tools/*` — Phase 12; contracts already specified in `AI_TOOLS.md`
 
 ## Example (as implemented)
 

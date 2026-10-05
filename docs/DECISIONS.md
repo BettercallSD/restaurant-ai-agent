@@ -2,6 +2,29 @@
 
 Architecture Decision Record. Newest first.
 
+## Hand-written function-calling schemas, not a generated ones
+
+**Decision**: `src/tools/schemas.js` hand-writes the 13 OpenAI-style function-calling JSON Schemas
+for the partner's orchestrator, rather than generating them from the `zod` validators in
+`src/validators/aiToolValidators.js` via a library like `zod-to-json-schema`.
+
+**Why**: 13 small, stable schemas don't justify a new dependency. The real enforcement is still the
+backend's own zod validation — if `schemas.js` ever drifts from a validator, the worst case is the
+AI sends something the backend rejects with `VALIDATION_ERROR` (annoying, recoverable), never a
+security or correctness gap, since the zod schema is what actually runs. Documented as a drift risk
+to watch, not eliminated — acceptable for 13 schemas that rarely change.
+
+## AI-facing tool responses are narrower than the equivalent REST responses
+
+**Decision**: `get_reservation`'s tool output returns table *labels* ("T5"), never the raw table
+UUIDs the plain REST API's equivalent response includes.
+
+**Why**: "never send unnecessary data to the AI" is a stated principle, not just a security one —
+the AI only ever needs to say a table number out loud, never reason about or forward an internal
+id. Rather than reuse `reservationService.formatReservation`'s output verbatim for both the
+dashboard-facing REST endpoint and the AI tool, `aiToolController.js` reshapes it per tool,
+intentionally keeping the two response shapes allowed to diverge.
+
 ## Session creation is public; everything else requires auth
 
 **Decision**: `POST /restaurants/:id/sessions` has no authentication — it's reachable with no

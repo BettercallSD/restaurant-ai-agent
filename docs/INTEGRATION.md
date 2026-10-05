@@ -14,8 +14,9 @@ Caller dials restaurant's number
   → every subsequent call for this session sends Authorization: Bearer <aiToken> — it only
     authorizes this one restaurant and this one session id, nothing else (docs/SECURITY.md)
   → your orchestration loop runs: STT → LLM decides intent/tool → call the matching
-    /api/v1/ai/tools/* endpoint (Phase 12 — not built yet; use the plain REST endpoints in API.md
-    with the aiToken in the meantime, e.g. POST .../reservations) with that Authorization header
+    POST /api/v1/ai/tools/<tool-name> endpoint (implemented — 13 tools, see AI_TOOLS.md) with that
+    Authorization header; there's no restaurantId in these URLs or bodies at all — it's resolved
+    from the aiToken, so there's nothing for the AI to redirect even if a prompt tried to
   → backend returns a structured JSON result (never prose) — your LLM turns that into speech via TTS
   → as slots get filled (date, time, partySize, name, ...), PATCH
     /api/v1/restaurants/:restaurantId/sessions/:id { state: {...} } (same aiToken) with the new

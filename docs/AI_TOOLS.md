@@ -1,13 +1,18 @@
 # AI Tools
 
-Status: design phase — signatures below are the contract Phase 12 implements against. Each tool is
-a specific REST endpoint under `/api/v1/ai/tools/*`, callable only with a session-scoped AI token
-(see `SECURITY.md`). The AI never calls anything else to affect restaurant data.
+Status: implemented (Phase 12), integration-tested against a real Postgres database
+(`tests/integration/aiTools.test.js`) and verified manually against a running server. Each tool is
+a `POST /api/v1/ai/tools/*` endpoint (`src/routes/aiToolRoutes.js`), callable only with a
+session-scoped AI token (`src/middleware/authenticate.js` + `requireAiActor.js` — a staff JWT is
+rejected with 403, verified in tests). The AI never calls anything else to affect restaurant data —
+there is no argument on any tool, anywhere, that could carry a different restaurant id than the one
+the token was issued for.
 
-Every tool follows the same shape: strict zod input schema → reject before touching anything →
-resolve `restaurantId` from the authenticated session (ignore/verify against any `restaurantId` in
-the args) → business logic via the matching service → structured, minimal output → logged to
-`ai_actions`.
+Every tool follows the same shape (`src/controllers/aiToolController.js`'s `tool()` wrapper): zod
+input schema validates the body → `restaurantId` comes from the authenticated session, never from
+the request → business logic via the existing reservation/order services (no tool-specific
+business logic exists — they're thin wrappers) → structured, minimal output → logged to
+`ai_actions` (success and failure both), capturing the sanitized input and result.
 
 ## `get_restaurant_info`
 - **Purpose**: name, opening hours, address, phone — orientation info for the AI to answer "are you

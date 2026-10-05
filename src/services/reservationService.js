@@ -1,6 +1,7 @@
 const { withTransaction } = require('../db/pool');
 const reservationRepository = require('../repositories/reservationRepository');
 const customerRepository = require('../repositories/customerRepository');
+const tableRepository = require('../repositories/tableRepository');
 const tableAllocationService = require('./tableAllocationService');
 const openingHoursService = require('./openingHoursService');
 const { assertReservationTransition } = require('./stateTransitionService');
@@ -60,7 +61,8 @@ async function createReservation(restaurant, { customerPhone, customerName, date
       );
     }
     const tableIds = await reservationRepository.findTableIdsForReservation(existing.id);
-    return formatReservation(existing, tableIds.map((id) => ({ id })));
+    const tables = await tableRepository.findByIds(tableIds);
+    return formatReservation(existing, tables);
   }
 
   openingHoursService.assertReservationDateTimeIsBookable(restaurant, date, time);
@@ -112,7 +114,8 @@ async function getReservation(restaurant, { reservationId, customerPhone }) {
     : await reservationRepository.findMostRecentActiveByPhone(restaurant.id, customerPhone);
   if (!reservation) throw notFound('Reservation');
   const tableIds = await reservationRepository.findTableIdsForReservation(reservation.id);
-  return formatReservation(reservation, tableIds.map((id) => ({ id })));
+  const tables = await tableRepository.findByIds(tableIds);
+  return formatReservation(reservation, tables);
 }
 
 async function modifyReservation(restaurant, reservationId, { partySize, date, time }) {

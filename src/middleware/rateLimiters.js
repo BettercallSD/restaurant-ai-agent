@@ -43,4 +43,14 @@ const mutationLimiter = rateLimit({
   handler: jsonRateLimitResponse,
 });
 
-module.exports = { authLimiter, sessionCreateLimiter, mutationLimiter };
+// A single conversation turn can involve several tool calls (check availability, then book, for
+// example), so this is more generous than mutationLimiter — scoped per IP, same as the others.
+const aiToolLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitResponse,
+});
+
+module.exports = { authLimiter, sessionCreateLimiter, mutationLimiter, aiToolLimiter };
