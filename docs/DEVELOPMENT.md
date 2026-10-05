@@ -1,9 +1,7 @@
 # Development Log
 
 ## Current phase
-Phases 7+8 complete (reservation engine + table allocation/concurrency, integration-tested
-against a real Postgres instance including a genuine concurrency race). Starting Phase 9 (order
-engine).
+Phase 9 complete (order engine, integration-tested). Starting Phase 10 (REST API).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -73,12 +71,26 @@ engine).
   contend for the same resource — then exactly one correctly won and the other got
   `RESERVATION_UNAVAILABLE`.
 
+- Phase 9: `src/services/orderService.js` — create/get/modify/cancel, reusing `pricingService`
+  (Phase 6) for all pricing and `orderRepository` (Phase 5) for persistence. No locking
+  transaction needed here (unlike reservations) — pricing is a pure read with no concurrency
+  hazard, since nothing about two people ordering the same menu item at once is a race; only table
+  *availability* is a scarce, lockable resource. Idempotency and the "unavailable item"/"unknown
+  item id"/"negative quantity" rejections all go through the exact same `buildOrderLines` function
+  Phase 6 already unit-tested — no new pricing logic was written here, only orchestration around
+  it. A reservationId passed to `create_order` is tenant-verified (must resolve under this
+  restaurant) before the order links to it.
+- Added `tests/integration/orderEngine.test.js` (12 tests). Combined with Phases 6-8, the suite is
+  now 51 tests, all passing, with zero new bugs found this round — the groundwork from Phases 5-8
+  (tenant-scoped repositories, the shared `AppError` factories, the `pg` DATE/TIME fix) carried
+  over cleanly.
+
 ## Current task
-Phase 9: the order engine (create/modify/cancel), built the same way — pricing from
-`pricingService` (Phase 6), persisted via `orderRepository` (Phase 5).
+Phase 10: the REST API (Express routes/controllers) exposing everything built so far.
 
 ## Next task
-Phase 10: the REST API (Express routes/controllers) exposing everything built so far.
+Phase 11: validation (zod schemas), authentication/authorization (staff JWT + AI session tokens),
+centralized error handling, and rate limiting — wired into the Phase 10 routes.
 
 ## Known issues
 - Combination-seating caps at 3 tables (`MAX_COMBINED_TABLES`) and searches by brute-force
@@ -104,8 +116,8 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Alternative times work
 - [x] Reservation modification works
 - [x] Cancellation works (including idempotent re-cancellation)
-- [ ] Orders work
-- [ ] Menu availability works
+- [x] Orders work (service layer; HTTP layer is Phase 10)
+- [x] Menu availability works (unavailable items rejected at order time)
 - [ ] AI tools work
 - [ ] AI cannot directly access the database
 - [ ] Backend validates AI tool arguments
@@ -113,7 +125,7 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [ ] AI actions are logged
 - [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; finalized Phase 16)
 - [ ] Security tests pass (full pass is Phase 17; reservation-layer cases already covered)
-- [x] Automated tests pass (39/39 — `npm test`; more added each phase)
+- [x] Automated tests pass (51/51 — `npm test`; more added each phase)
 - [x] No secrets are committed
 - [x] Tenant isolation works (reservation layer; full HTTP-layer coverage is Phase 11)
 - [ ] SQL injection protection works (true at every query written so far; full sweep Phase 17)

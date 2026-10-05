@@ -26,9 +26,10 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 - [x] Cancellation (valid transition, and idempotent re-cancellation)
 - [x] Invalid reservation state transition (modifying/re-transitioning a CANCELLED reservation)
 - [x] Modification (valid, re-checks availability)
-- [ ] Valid order
-- [ ] Unavailable menu item → rejected
-- [ ] Invalid quantity (0, negative, over max)
+- [x] Valid order (priced from the database, a smuggled client-side price field ignored)
+- [x] Unavailable menu item → rejected
+- [x] Invalid quantity (0, negative — unit-tested in Phase 6; over-max bound enforced once the
+      Phase 11 zod schema lands)
 - [ ] Unauthorized request (no/invalid token)
 - [x] Cross-restaurant access attempt → 404 at the service layer (`tenant isolation` suite).
       Full HTTP-layer version (restaurant A's token against restaurant B's resource) lands with
@@ -39,7 +40,8 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
       never executed anywhere (this is an API, so the real assertion is "returned verbatim as a
       JSON string, not interpreted")
 - [ ] Path traversal attempt in an id-like field (`../../etc/passwd`) → fails UUID validation, 400
-- [ ] Negative / huge quantities on an order
+- [x] Negative quantity on an order (unavailable item, unknown item id, and idempotency
+      replay/mismatch all covered in `tests/integration/orderEngine.test.js`)
 - [ ] Invalid/malformed ids (non-UUID strings)
 - [ ] Unexpected extra fields in a request body (mass-assignment attempt, e.g. a client trying to
       set `status` or `restaurantId` directly) → ignored, not applied
