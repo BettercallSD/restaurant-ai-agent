@@ -17,20 +17,22 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 ## Required cases (tracked here, checked off as implemented)
 
 - [ ] Valid reservation
-- [ ] Unavailable table → alternatives returned
-- [ ] Invalid party size (0, negative, absurdly large)
-- [ ] Invalid date (past date, malformed string)
-- [ ] Duplicate reservation (same idempotency key, same body) → same result, no second row
-- [ ] Duplicate reservation (same idempotency key, different body) → rejected
-- [ ] Cancellation (valid transition)
-- [ ] Invalid reservation state transition (e.g. `CANCELLED → CONFIRMED`)
-- [ ] Modification (valid, re-checks availability)
+- [x] Unavailable table → alternatives returned (`tests/integration/reservationEngine.test.js`)
+- [x] Invalid party size (0 — DB check constraint). Negative/absurdly-large covered at the Phase
+      11 validator layer once zod schemas exist; the service layer already rejects 0 via Postgres.
+- [x] Invalid date (past date). Malformed string covered at the Phase 11 validator layer (zod).
+- [x] Duplicate reservation (same idempotency key, same body) → same result, no second row
+- [x] Duplicate reservation (same idempotency key, different body) → rejected
+- [x] Cancellation (valid transition, and idempotent re-cancellation)
+- [x] Invalid reservation state transition (modifying/re-transitioning a CANCELLED reservation)
+- [x] Modification (valid, re-checks availability)
 - [ ] Valid order
 - [ ] Unavailable menu item → rejected
 - [ ] Invalid quantity (0, negative, over max)
 - [ ] Unauthorized request (no/invalid token)
-- [ ] Cross-restaurant access attempt (restaurant A's token/session against restaurant B's
-      resource) → 404, and the response body proven not to leak that the resource exists
+- [x] Cross-restaurant access attempt → 404 at the service layer (`tenant isolation` suite).
+      Full HTTP-layer version (restaurant A's token against restaurant B's resource) lands with
+      Phase 11 auth.
 - [ ] SQL injection attempt in a text field (`' OR '1'='1`, `" OR "1"="1`) → treated as literal
       string data, no behavior change
 - [ ] XSS payload in a text field (`<script>alert(1)</script>`) → stored/returned as literal text,
@@ -44,17 +46,23 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
 - [ ] Duplicate state-changing request without an idempotency key racing itself (two concurrent
       identical creates) → exactly one reservation/order row survives
 - [ ] Invalid AI tool arguments (wrong types, missing required fields) → `VALIDATION_ERROR`, no
-      service/repository code reached
-- [ ] Concurrent reservation attempt for the same table/slot → exactly one succeeds, the other
-      gets `RESERVATION_UNAVAILABLE` (exercises the row-locking transaction directly, not just the
-      application-level check)
+      service/repository code reached (Phase 11/12 — needs the zod schemas and tool endpoints)
+- [x] Concurrent reservation attempt for the same table/slot → exactly one succeeds, the other
+      gets `RESERVATION_UNAVAILABLE`. Verified with a genuine `Promise.allSettled` race against a
+      real Postgres connection pool (not mocked) in
+      `tests/integration/reservationEngine.test.js` — two parties of 8 racing for the one
+      remaining table after every other table is deliberately filled first.
 
 ## Commands
 
 ```bash
-npm test                # full suite against DATABASE_URL_TEST
+npm test                # migrates + seeds the test DB, then runs the full suite against it
 npm run test:unit       # business-logic unit tests only, no DB required
 npm run migrate:test    # apply migrations to the test database
+npm run seed:test       # seed Himalayan Bites into the test database
 ```
+
+`npm test` is self-contained — it migrates and seeds `DATABASE_URL_TEST` before running Jest, so
+a fresh checkout only needs that env var set to a real (empty) Postgres database.
 
 (Exact script names finalized when `package.json` lands in Phase 3; this file is updated then.)

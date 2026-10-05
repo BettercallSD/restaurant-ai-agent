@@ -1,7 +1,9 @@
 # Development Log
 
 ## Current phase
-Phase 6 complete (business services, unit-tested). Starting Phase 7 (reservation engine).
+Phases 7+8 complete (reservation engine + table allocation/concurrency, integration-tested
+against a real Postgres instance including a genuine concurrency race). Starting Phase 9 (order
+engine).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -52,19 +54,36 @@ Phase 6 complete (business services, unit-tested). Starting Phase 7 (reservation
   unknown id, a smuggled `priceCents` field being silently ignored, every terminal-state
   transition rejected).
 
+- Phases 7+8: `src/services/tableAllocationService.js` (the exact-fit → smallest-suitable →
+  allowed-combination algorithm, as a read-only `checkAvailability` for advisory checks and a
+  locking `allocateWithLock` for actual bookings — see docs/DATABASE.md's concurrency section) and
+  `src/services/reservationService.js` (create/get/modify/cancel, idempotency-key handling,
+  alternative-time search on failure). Added `src/utils/dateTime.js` (restaurant-local calendar
+  arithmetic, no date library) and `src/config/constants.js`. Found and fixed a real bug along the
+  way: `pg` parses `DATE`/`TIME` columns into JS `Date` objects by default, which silently broke
+  every string-based comparison the whole system relies on (idempotency replay comparison, opening
+  hours) — fixed with a type-parser override in `src/db/pool.js`, caught by the idempotency
+  integration test failing unexpectedly rather than by inspection.
+- Added `tests/integration/reservationEngine.test.js` (13 tests against a real Postgres test
+  database) alongside the Phase 6 unit tests — 39 tests total, all passing. The concurrency test
+  genuinely matters here: an early version of it raced two parties of 6 at a fresh slot and both
+  "succeeded", which looked like a double-booking bug but was actually a test design flaw (the
+  restaurant had enough separate tables + allowed combination to legitimately seat both). Fixed by
+  first deliberately filling every table except one, so the two concurrent requests actually
+  contend for the same resource — then exactly one correctly won and the other got
+  `RESERVATION_UNAVAILABLE`.
+
 ## Current task
-Phase 7: the reservation engine (create/modify/cancel) wired through these services, plus the
-table-allocation algorithm itself (exact fit → smallest suitable → allowed combination) that
-Phase 6 deliberately left out since it needs the repository-layer locking primitives, not just
-pure logic.
+Phase 9: the order engine (create/modify/cancel), built the same way — pricing from
+`pricingService` (Phase 6), persisted via `orderRepository` (Phase 5).
 
 ## Next task
-Phase 8 concurrency hardening is really built alongside Phase 7 (the locking transaction IS the
-allocation algorithm's safety net) — then Phase 9, the order engine.
+Phase 10: the REST API (Express routes/controllers) exposing everything built so far.
 
 ## Known issues
-- `reservation_tables` combination-seating (`allow_table_combination`) is schema-ready but the
-  allocation algorithm implementing it lands in Phase 7/8, not before.
+- Combination-seating caps at 3 tables (`MAX_COMBINED_TABLES`) and searches by brute-force
+  combination enumeration — fine at hackathon scale (a handful of tables per restaurant), would
+  need a smarter search for a restaurant with dozens of tables.
 - Dev-dependency `braces` (via `jest`) has an open high-severity advisory; tracked in
   `SECURITY.md`, not in the production dependency tree.
 
@@ -78,13 +97,13 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Database can be created from scratch
 - [x] Migrations work (verified up/down/up against a real Postgres instance)
 - [x] Seed data works (verified idempotent against a real Postgres instance)
-- [ ] Backend starts successfully
-- [ ] REST API works
-- [ ] Reservations work
-- [ ] Table allocation works
-- [ ] Alternative times work
-- [ ] Reservation modification works
-- [ ] Cancellation works
+- [ ] Backend starts successfully (no HTTP server yet — Phase 10)
+- [ ] REST API works (Phase 10)
+- [x] Reservations work (service layer; HTTP layer is Phase 10)
+- [x] Table allocation works (exact fit → smallest suitable → combination, integration-tested)
+- [x] Alternative times work
+- [x] Reservation modification works
+- [x] Cancellation works (including idempotent re-cancellation)
 - [ ] Orders work
 - [ ] Menu availability works
 - [ ] AI tools work
@@ -93,13 +112,13 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [ ] Conversation/session state works
 - [ ] AI actions are logged
 - [ ] Partner integration is documented (first draft done — `INTEGRATION.md`; finalized Phase 16)
-- [ ] Security tests pass
-- [ ] Automated tests pass
-- [ ] No secrets are committed
-- [ ] Tenant isolation works
-- [ ] SQL injection protection works
-- [ ] Duplicate requests are handled
-- [ ] Transactions are used where necessary
+- [ ] Security tests pass (full pass is Phase 17; reservation-layer cases already covered)
+- [x] Automated tests pass (39/39 — `npm test`; more added each phase)
+- [x] No secrets are committed
+- [x] Tenant isolation works (reservation layer; full HTTP-layer coverage is Phase 11)
+- [ ] SQL injection protection works (true at every query written so far; full sweep Phase 17)
+- [x] Duplicate requests are handled (idempotency keys, reservations)
+- [x] Transactions are used where necessary (reservation create/modify locking transaction)
 - [ ] Documentation matches actual implementation
 - [ ] Fresh setup is documented
 - [ ] A new developer can clone, configure `.env`, migrate/seed, start, and test from the README

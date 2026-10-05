@@ -13,7 +13,8 @@
     "migrate:create": "node-pg-migrate create",
     "migrate:test": "cross-env DATABASE_URL=$DATABASE_URL_TEST node-pg-migrate up",
     "seed": "node src/db/seed.js",
-    "test": "cross-env DATABASE_URL=$DATABASE_URL_TEST NODE_ENV=test jest --runInBand",
+    "seed:test": "cross-env DATABASE_URL=$DATABASE_URL_TEST node src/db/seed.js",
+    "test": "npm run migrate:test && npm run seed:test && cross-env DATABASE_URL=$DATABASE_URL_TEST NODE_ENV=test jest --runInBand",
     "test:unit": "jest --runInBand --testPathPattern=unit"
   },
   "dependencies": {

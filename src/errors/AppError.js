@@ -6,11 +6,20 @@
  * never has its message shown to the client.
  */
 class AppError extends Error {
-  constructor(code, message, statusCode) {
+  /**
+   * `details` is optional extra structured data the error handler spreads alongside
+   * `error: { code, message }` in the response — e.g. `RESERVATION_UNAVAILABLE` attaches
+   * `{ alternatives: [...] }` so the AI can offer them without a second request. Never put
+   * anything here that shouldn't reach the client; this bypasses the "safe error" stripping that
+   * applies to the message of an *unexpected* error, because an AppError is, by definition, one
+   * we threw on purpose with a response we intend the client to see.
+   */
+  constructor(code, message, statusCode, details) {
     super(message);
     this.name = 'AppError';
     this.code = code;
     this.statusCode = statusCode;
+    this.details = details;
   }
 }
 
@@ -27,6 +36,6 @@ const forbidden = (message = 'You do not have access to this resource.') =>
 const unauthorized = (message = 'Authentication required.') =>
   new AppError('UNAUTHORIZED', message, 401);
 
-const conflict = (code, message) => new AppError(code, message, 409);
+const conflict = (code, message, details) => new AppError(code, message, 409, details);
 
 module.exports = { AppError, notFound, validationError, forbidden, unauthorized, conflict };

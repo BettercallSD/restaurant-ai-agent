@@ -18,6 +18,19 @@ Success responses are `{ "success": true, ...payload }`. The client (AI orchestr
 dashboard) branches on `success`, never on HTTP status alone, though status codes are also set
 correctly (see below).
 
+Some errors carry extra structured data alongside `error` — most notably
+`RESERVATION_UNAVAILABLE`, which adds `alternatives` at the top level:
+
+```json
+{
+  "success": false,
+  "error": { "code": "RESERVATION_UNAVAILABLE", "message": "No table is available at the requested time." },
+  "alternatives": ["19:30", "20:00"]
+}
+```
+
+so the AI can offer them immediately without a second `find_alternative_times` call.
+
 No response body ever includes a SQL query, a stack trace, a file path, an env var name, or a
 raw driver error message. A centralized Express error-handling middleware is the only place that
 formats error responses; route/controller code throws a typed `AppError` (see
