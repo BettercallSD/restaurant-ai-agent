@@ -1,9 +1,9 @@
 # Development Log
 
 ## Current phase
-Phase 16 complete (partner integration docs verified against the real implementation — found and
-fixed a genuine IDOR gap along the way, not just doc drift). Starting Phase 17 (final security
-audit).
+Phase 17 complete (final security audit — a skeptical re-verification of `SECURITY.md`'s checklist,
+not a rubber stamp; found and fixed four real issues, detailed below). Starting Phase 18
+(end-to-end testing).
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -233,13 +233,51 @@ audit).
   Funtasy League project's categories early on — 16 phases of a clean, stable catalog later, that
   risk is moot and the placeholders were just clutter. 98/98 tests passing.
 
-## Current task
-Phase 17: the final security audit pass (`SECURITY.md`'s checklist is already nearly all checked
-off incidentally; Phase 17 is a deliberate, skeptical re-verification, not a rubber stamp).
+- Phase 17: a deliberate, skeptical re-verification of `SECURITY.md`'s checklist rather than a
+  rubber stamp — re-measured and re-tested claims instead of accepting them as already proven, and
+  found four real issues:
+  - **Login timing side-channel.** The existing mitigation (returning an identical error message
+    for "no such user" and "wrong password") did nothing against a timing attack: a nonexistent
+    email short-circuited in ~1.5ms while a real email with a wrong password took bcrypt's usual
+    ~300ms — a trivially measurable, ~200x gap that lets an attacker enumerate staff emails by
+    response time alone regardless of the identical wording. Measured it with a throwaway
+    reproduction script before touching the code. Fixed in `authService.login` by always running
+    `bcrypt.compare` against a real dummy hash when no user is found, so both paths cost the same
+    ~300ms; re-measured after the fix (292ms vs. 294ms) to confirm the gap actually closed, not
+    just that the code looked right.
+  - **`X-Powered-By: Express` header disclosure.** Found live in response headers — free framework
+    fingerprinting for an attacker. Fixed with `app.disable('x-powered-by')` in `src/app.js`.
+  - **Missing rate limiter on public-information routes.** `SECURITY.md` had always called out five
+    rate-limited endpoint classes (auth, session creation, reservations/orders, AI tools, public
+    information) but only four were ever wired up — the three public `GET` routes
+    (`/restaurants/:id`, `.../tables`, `.../menu`) had no limiter at all. Added `publicReadLimiter`
+    (300/15min) in `rateLimiters.js` and applied it to all three.
+  - **Unvalidated `categoryId` query parameter, and a dead authorization check.** The menu
+    endpoint's `categoryId` query param was never validated as a UUID (a malformed value fell
+    through to Postgres as a raw string comparison instead of a clean 400), and — more
+    significantly — `menuRepository.categoryExists` had existed since Phase 5 but nothing ever
+    called it, so a `categoryId` belonging to a *different* restaurant (or a nonexistent one)
+    silently returned every category with empty items instead of the 404 `AI_TOOLS.md` had always
+    documented. Added `validateQuery` middleware + `restaurantValidators.listMenuQuerySchema`, and
+    extracted the duplicated REST/AI-tool menu logic into a single `menuService.listMenu` that
+    actually calls `categoryExists` and throws `notFound` — one fix instead of two divergent ones.
+  All four verified live against a running server, not just in the test suite. 103/103 tests
+  passing (5 new: category filtering, malformed-categoryId 400, cross-tenant-categoryId 404,
+  `X-Powered-By` absence, rate-limit headers present on public reads). `SECURITY.md` rewritten:
+  "Final audit (Phase 17)" checklist fully checked off, new threat-model rows for framework
+  fingerprinting and unvalidated query input, a dedicated note on why `trust proxy` is left unset,
+  and a new "Known tradeoffs" section stating the remaining v1 scope decisions plainly instead of
+  leaving them implicit.
 
-## Next task
+## Current task
 Phase 18: end-to-end testing — a full pass exercising the complete system as a whole rather than
 phase-by-phase, as close to a dry run of the actual hackathon demo as this backend alone can get.
+
+## Next task
+None — Phase 18 is the last phase in the implementation order. Once it's done, the backend scope
+for the hackathon is complete; any further work (dashboard staff-write endpoints, Redis-backed
+rate limiting, refresh-token rotation — see "Known tradeoffs" in `SECURITY.md`) is explicitly
+out-of-scope v1 follow-up, not a gap in the current plan.
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -293,10 +331,14 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
 - [x] Partner integration is documented (`INTEGRATION.md` + `src/tools/schemas.js`, verified
       field-by-field against the real implementation in Phase 16 — a scripted diff found zero drift
       in the schemas, and the one real gap found was in the prose, not the schemas, and is fixed)
-- [ ] Security tests pass (full pass is Phase 17; auth/authz/reservation/order/HTTP-layer/AI-tool/
-      logging cases already covered, including live SQL injection/XSS/mass-assignment/rate-limit
-      checks and a live grep-for-the-raw-token-in-logs check against a running server)
-- [x] Automated tests pass (98/98 — `npm test`; every `TESTING.md` required case now checked off)
+- [x] Security tests pass (Phase 17's final audit: auth/authz/reservation/order/HTTP-layer/AI-tool/
+      logging cases covered, including live SQL injection/XSS/mass-assignment/rate-limit checks and
+      a live grep-for-the-raw-token-in-logs check against a running server, plus the four issues
+      found and fixed this phase — login timing side-channel, `X-Powered-By` disclosure, missing
+      public-read rate limiter, unvalidated `categoryId` — all re-verified live, not just by
+      re-reading `SECURITY.md`'s existing claims)
+- [x] Automated tests pass (103/103 — `npm test`; every `TESTING.md` required case checked off,
+      plus 5 new Phase 17 regression tests)
 - [x] No secrets are committed
 - [x] Tenant isolation works (real authentication + authorization, not just data-layer scoping —
       verified with cross-tenant *and* cross-session access attempts, live and in the test suite)

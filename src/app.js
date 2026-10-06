@@ -7,6 +7,10 @@ const { logger } = require('./config/logger');
 
 const app = express();
 
+// Found during the Phase 17 audit: Express sets this by default, handing out the exact framework
+// in every response header for free — no reason to make that easier than it needs to be.
+app.disable('x-powered-by');
+
 // Structured, request-scoped logging (docs/SECURITY.md "unsafe logs"): every request gets a log
 // line with method/path/status/duration and a request id, and `req.log` is available to any
 // downstream handler (the error handler uses it) as a logger already bound to that request id —

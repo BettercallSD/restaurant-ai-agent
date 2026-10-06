@@ -3,6 +3,7 @@ const aiActionRepository = require('../repositories/aiActionRepository');
 const auditLogRepository = require('../repositories/auditLogRepository');
 const reservationService = require('../services/reservationService');
 const orderService = require('../services/orderService');
+const menuService = require('../services/menuService');
 const tableAllocationService = require('../services/tableAllocationService');
 const openingHoursService = require('../services/openingHoursService');
 const { notFound } = require('../errors/AppError');
@@ -67,20 +68,8 @@ const getRestaurantInfo = tool('get_restaurant_info', async (req) => {
 });
 
 const getMenu = tool('get_menu', async (req) => {
-  const { categoryId } = req.body;
-  const categories = await menuRepository.listCategories(req.restaurant.id);
-  const items = await menuRepository.listItems(req.restaurant.id, { categoryId });
-  const itemsByCategory = new Map(categories.map((c) => [c.id, []]));
-  for (const item of items) {
-    itemsByCategory.get(item.categoryId)?.push({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      priceCents: item.priceCents,
-      isAvailable: item.isAvailable,
-    });
-  }
-  return { categories: categories.map((c) => ({ id: c.id, name: c.name, items: itemsByCategory.get(c.id) ?? [] })) };
+  const categories = await menuService.listMenu(req.restaurant, req.body.categoryId);
+  return { categories };
 });
 
 const checkItemAvailability = tool('check_item_availability', async (req) => {

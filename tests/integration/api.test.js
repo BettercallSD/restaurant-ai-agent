@@ -110,6 +110,35 @@ describe('restaurant/menu/tables routes (public)', () => {
     expect(res.status).toBe(200);
     expect(res.body.tables).toHaveLength(6);
   });
+
+  test('GET /restaurants/:id/menu?categoryId= filters to a real category', async () => {
+    const res = await request(app).get(`/api/v1/restaurants/${restaurant.id}/menu?categoryId=${momo.categoryId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.categories.find((c) => c.id === momo.categoryId).items.length).toBeGreaterThan(0);
+  });
+
+  test('a malformed categoryId query param is a clean 400, not a raw DB error', async () => {
+    const res = await request(app).get(`/api/v1/restaurants/${restaurant.id}/menu?categoryId=not-a-uuid`);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('a categoryId that does not belong to this restaurant is a 404, not an empty-but-200 list', async () => {
+    const res = await request(app).get(
+      `/api/v1/restaurants/${restaurant.id}/menu?categoryId=00000000-0000-0000-0000-000000000000`
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test('responses do not leak the framework via X-Powered-By', async () => {
+    const res = await request(app).get(`/api/v1/restaurants/${restaurant.id}`);
+    expect(res.headers['x-powered-by']).toBeUndefined();
+  });
+
+  test('public read endpoints are rate-limited', async () => {
+    const res = await request(app).get(`/api/v1/restaurants/${restaurant.id}/menu`);
+    expect(res.headers['ratelimit-limit']).toBeDefined();
+  });
 });
 
 describe('reservation/order routes require authentication', () => {

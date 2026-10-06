@@ -16,6 +16,19 @@ const jsonRateLimitResponse = (req, res) => {
   });
 };
 
+// Public read endpoints (restaurant info, menu, tables) carry no auth, so they had no rate limit
+// at all until the Phase 17 audit caught it — the brief's own guidance calls out "public
+// information" as its own limiter class, separate from auth/reservations/orders/AI tools, and this
+// was the one category that had been skipped. Generous: a page of judges refreshing a menu during
+// a demo should never notice it.
+const publicReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitResponse,
+});
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -53,4 +66,4 @@ const aiToolLimiter = rateLimit({
   handler: jsonRateLimitResponse,
 });
 
-module.exports = { authLimiter, sessionCreateLimiter, mutationLimiter, aiToolLimiter };
+module.exports = { publicReadLimiter, authLimiter, sessionCreateLimiter, mutationLimiter, aiToolLimiter };

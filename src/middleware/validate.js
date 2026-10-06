@@ -20,4 +20,22 @@ const validate = (schema) => (req, res, next) => {
   next();
 };
 
-module.exports = { validate };
+/**
+ * Same idea as `validate`, for `req.query` — added in the Phase 17 audit after a malformed
+ * `?categoryId=` query string was found reaching Postgres directly as an unvalidated query
+ * parameter and surfacing as a raw 500 instead of a clean 400 (every body field already went
+ * through `validate`; this was the one query-string input that never did).
+ */
+const validateQuery = (schema) => (req, res, next) => {
+  const result = schema.safeParse(req.query);
+  if (!result.success) {
+    const message = result.error.issues
+      .map((issue) => `${issue.path.join('.') || '(query)'}: ${issue.message}`)
+      .join('; ');
+    return next(validationError(message));
+  }
+  req.query = result.data;
+  next();
+};
+
+module.exports = { validate, validateQuery };
