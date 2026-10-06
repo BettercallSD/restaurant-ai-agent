@@ -1,6 +1,7 @@
 # Testing
 
-Status: strategy defined now, suite built in Phase 15 and extended as each engine lands.
+Status: suite built in Phase 15, extended through Phase 17, and complete as of Phase 18's
+end-to-end pass (103/103 automated tests, plus a live full-system run — see below).
 
 ## Strategy
 
@@ -13,6 +14,16 @@ Status: strategy defined now, suite built in Phase 15 and extended as each engin
   repository → database` path, asserting the exact structured JSON shape documented in
   `AI_TOOLS.md` — these are what prove the AI genuinely can't bypass business logic, not just that
   the HTTP route exists.
+- **End-to-end (Phase 18)**: all of the above runs each piece in isolation (a fresh transaction per
+  test, each engine tested on its own). Phase 18 added one more layer on top: a single continuous
+  run of every `DEMO_SCENARIOS.md` scenario, in order, as one AI session against one live,
+  freshly-migrated-and-seeded server — the same way a real phone call would actually exercise the
+  system, state carried from one tool call to the next, rather than each case starting from a
+  clean slate. This is what actually proved the full check→book→modify→cancel lifecycle, the
+  menu→order flow, and every Phase 17 security fix hold up identically when run together instead
+  of independently. Not committed as a Jest suite (it drives a running server over real HTTP and
+  is meant to be re-run by hand before a demo, not on every `npm test`) — see
+  `DEVELOPMENT.md`'s Phase 18 entry for what it covered and found.
 
 ## Required cases (tracked here, checked off as implemented)
 

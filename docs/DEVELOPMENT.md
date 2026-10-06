@@ -269,15 +269,52 @@ not a rubber stamp; found and fixed four real issues, detailed below). Starting 
   and a new "Known tradeoffs" section stating the remaining v1 scope decisions plainly instead of
   leaving them implicit.
 
+- Phase 18: end-to-end testing — exercising the complete system as a whole against a live,
+  freshly-migrated-and-seeded dev-database server, not phase-by-phase in isolation. Ran every
+  scenario in `DEMO_SCENARIOS.md` (1-9) as a real AI-session-token-driven conversation against
+  `http://localhost:3000`, plus a second pass of the cross-cutting security checks
+  (cross-tenant/IDOR, SQL injection, XSS, mass assignment, malformed ids, idempotency-key replay
+  and mismatch, rate-limit headers, `X-Powered-By` absence, token redaction in logs) — 34/34 live
+  checks passed, on top of the existing `npm test` 103/103. This surfaced two things worth fixing,
+  neither a code defect:
+  - Scenario 7 ("book the whole restaurant") exercises *two* distinct validation layers that
+    `AI_TOOLS.md` had conflated into one: a fixed schema-level sanity bound on `partySize`
+    (1-50, same for every restaurant) that rejects genuinely absurd input with a `400
+    VALIDATION_ERROR` before any query runs, and — separately — the actual reservation-engine
+    check against *this restaurant's* real seating capacity, which returns the normal `{
+    available: false, alternatives: [] }` shape for a party that's in-range but still too big for
+    this specific restaurant. The demo script's "80 people" example only exercises the first layer
+    at Himalayan Bites' current (tiny, 6-table) seed data; a party sized between this restaurant's
+    real capacity and 50 exercises the second layer, and is the one that actually matches the
+    scenario's own description ("no viable alternatives" from business logic, not a request
+    rejected before it's even understood). Fixed by rewriting the `check_table_availability` entry
+    in `AI_TOOLS.md` to describe both layers explicitly instead of implying a single, dynamic
+    per-restaurant ceiling that doesn't exist in the code.
+  - Confirmed (by reading `reservationService.assertIdempotencyBodyMatches` and the equivalent in
+    `orderService`) that idempotency-key body-mismatch detection deliberately compares only the
+    fields that define the resource being created (`date`/`time`/`partySize` for reservations,
+    `items` for orders) — not `customerName`/`customerPhone`. That's consistent, intentional
+    design (the key identifies a request's *intent*, not the caller), not a gap — an earlier draft
+    of the end-to-end script assumed changing only the customer's name counted as "a different
+    body" and got a same-reservation replay instead of the expected 409; that was a test-script
+    mistake, not an application bug, once checked against what the comparison function actually
+    promises to guard.
+  No other gaps found — restaurant tenant isolation, the full check→book→modify→cancel and
+  check→order lifecycle, menu-driven ordering with server-side pricing, the transfer-to-human
+  escalation path, and every Phase 17 security fix all held up identically under a live,
+  end-to-end run as they did in the per-phase test suite.
+
 ## Current task
-Phase 18: end-to-end testing — a full pass exercising the complete system as a whole rather than
-phase-by-phase, as close to a dry run of the actual hackathon demo as this backend alone can get.
+None — Phase 18 was the last phase in the 18-phase implementation order. The backend is feature-
+and security-complete for the hackathon's scope: see `README.md`'s Status section and
+`docs/SECURITY.md`'s "Known tradeoffs" for exactly what's intentionally out of scope for v1.
 
 ## Next task
-None — Phase 18 is the last phase in the implementation order. Once it's done, the backend scope
-for the hackathon is complete; any further work (dashboard staff-write endpoints, Redis-backed
-rate limiting, refresh-token rotation — see "Known tradeoffs" in `SECURITY.md`) is explicitly
-out-of-scope v1 follow-up, not a gap in the current plan.
+None owed by this plan. Any further work (dashboard staff-write endpoints, Redis-backed rate
+limiting, refresh-token rotation — see "Known tradeoffs" in `SECURITY.md`) is explicitly
+out-of-scope v1 follow-up, not a gap in the 18-phase plan. What remains for the hackathon itself —
+wiring up telephony/STT/TTS and the orchestration loop against this backend's AI tool layer — is
+the partner's side of `docs/INTEGRATION.md`, not backend work.
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -352,3 +389,6 @@ See `DECISIONS.md` for the full ADR log. Summary: no ORM, UUID PKs, cents pricin
       the way — see above)
 - [x] Fresh setup is documented (README.md has the real, verified commands)
 - [x] A new developer can clone, configure `.env`, migrate/seed, start, and test from the README
+- [x] End-to-end: every `DEMO_SCENARIOS.md` scenario (1-9) runs correctly as a single continuous
+      conversation against a live, freshly-seeded server — not just as isolated per-phase tests
+      (Phase 18)

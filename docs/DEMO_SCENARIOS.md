@@ -1,10 +1,11 @@
 # Demo Scenarios
 
-Status: every scenario below is now backed by a real, passing test (not just plausible-sounding —
-actually run against a live Postgres database, several verified live against a running server too).
-This becomes the literal hackathon demo script once the voice layer is wired up; until then, the
-closest equivalent of "running the demo" is `npm test` plus the manual `curl` sequences noted in
-`DEVELOPMENT.md`'s phase log.
+Status: every scenario below is backed by a real, passing test, **and** (as of Phase 18) has been
+run end-to-end as a single continuous conversation against a live, freshly-migrated-and-seeded
+server — not just individually in isolation across the per-phase test suite. This becomes the
+literal hackathon demo script once the voice layer is wired up; until then, the closest equivalent
+of "running the demo" is `npm test` plus the manual `curl` sequences noted in `DEVELOPMENT.md`'s
+Phase 18 log entry.
 
 1. **Customer books a table.** "Table for 4 tomorrow at 7" → name collected → `check_table_availability`
    (available) → `create_reservation` → confirmed.
@@ -21,9 +22,12 @@ closest equivalent of "running the demo" is `npm test` plus the manual `curl` se
 6. **Customer places an order.** "2 chicken momo, 1 chowmein, 1 coke" → AI maps spoken items to
    `menuItemId`s (via `get_menu` lookup) → `create_order` → backend computes total from DB prices →
    AI reads back the total.
-7. **AI escalates an unsupported request.** "I want to book the whole restaurant for 80 people
-   next week" (exceeds any realistic table/combination capacity) → `check_table_availability`
-   returns unavailable with no viable alternatives → AI offers `transfer_to_human`.
+7. **AI escalates an unsupported request.** "I want to book the whole restaurant for [a party
+   bigger than this restaurant's total seating] next week" → `check_table_availability` returns
+   unavailable with no viable alternatives (business logic, not input validation — see
+   `AI_TOOLS.md`'s `check_table_availability` entry for the distinction between this and a party
+   size over the flat 50-person input-sanity cap, which is a different, earlier-rejected case) →
+   AI offers `transfer_to_human`.
 8. **Malicious cross-restaurant access attempt.** A test harness forges a tool call referencing a
    reservation ID known to belong to a different restaurant's session → `get_reservation`/
    `cancel_reservation` returns 404, not the other restaurant's data — demonstrated live as a

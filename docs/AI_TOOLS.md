@@ -35,9 +35,16 @@ business logic exists — they're thin wrappers) → structured, minimal output 
 
 ## `check_table_availability`
 - **Purpose**: the core reservation-engine query.
-- **Input**: `{ date: 'YYYY-MM-DD', time: 'HH:mm', partySize: int(1..) }`
-- **Validation**: date not in the past (restaurant timezone), within opening hours, partySize > 0
-  and ≤ largest combinable capacity.
+- **Input**: `{ date: 'YYYY-MM-DD', time: 'HH:mm', partySize: int(1..50) }`
+- **Validation**: two layers, checked in order. First, a schema-level sanity bound on
+  `partySize` (1-50, the same fixed ceiling for every restaurant regardless of its actual seating
+  — rejects absurd input before it ever reaches a query) — a value outside that range is a clean
+  `400 VALIDATION_ERROR`, not the tool's normal `{ available, ... }` shape. Second, once past that,
+  date not in the past (restaurant timezone), within opening hours, and the actual
+  reservation-engine check against *this restaurant's* real/combinable table capacity — a party
+  that clears the 1-50 sanity bound but still exceeds what this restaurant can seat gets the
+  normal `{ available: false, alternatives: [] }` response (see Phase 18's `DEMO_SCENARIOS.md`
+  scenario 7: the "book the whole restaurant" case exercises this second layer, not the first).
 - **Output (available)**: `{ available: true, options: [{ tableId, capacity }, ...] }` (smallest
   suitable first; combinations only if `allow_table_combination`)
 - **Output (unavailable)**: `{ available: false, alternatives: ['19:30', '20:00'] }` — structured
