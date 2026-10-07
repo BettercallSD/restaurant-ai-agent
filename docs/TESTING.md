@@ -80,6 +80,37 @@ end-to-end pass (103/103 automated tests, plus a live full-system run — see be
       `tests/integration/reservationEngine.test.js` — two parties of 8 racing for the one
       remaining table after every other table is deliberately filled first.
 
+## Manual verification checklist (independent, by hand)
+
+A third layer on top of the automated suite and the Phase 18 scripted end-to-end run: a fresh
+clone, set up and walked through manually by hand, end to end, as a sanity check that an outside
+developer following only the README actually gets a working system — not just that the commands
+in `DEVELOPMENT.md`'s phase log happen to work in the environment that wrote them.
+
+- [x] **Project setup** — installed Node dependencies, created `.env` from `.env.example`, set up
+      PostgreSQL, created both databases (`DATABASE_URL` and `DATABASE_URL_TEST`), ran migrations,
+      seeded sample restaurant data.
+- [x] **Server start** — API running at `localhost:3000`; `GET /health` confirmed.
+- [x] **Restaurant APIs** (public, no auth) — restaurant info, menu, tables all returned correctly.
+- [x] **Staff login** — logged in as the restaurant owner, received a JWT; confirmed protected
+      endpoints reject an expired token (the specific case `TESTING.md`'s required-cases list
+      above already tracks, independently re-confirmed by hand here).
+- [x] **Reservations** — created, retrieved, modified, cancelled; duplicate creation under the same
+      idempotency key correctly prevented (no second row).
+- [x] **Orders** — created with menu items, total computed correctly from DB prices (not a
+      client-supplied value), retrieved, modified, cancelled.
+
+**Not yet covered by this manual pass** (flagged rather than assumed fine just because the
+automated suite covers it):
+- The idempotency-key check in the *other* direction — same key, a **different** body — correctly
+  rejected with a 409, rather than only verifying the same-key/same-body replay case above. This
+  is the subtler of the two halves: a real concurrency bug was found and fixed here in Phase 15
+  (see `DECISIONS.md`), so it's worth confirming by hand too, not just trusting the automated test.
+- The **AI tool endpoints** (`POST /api/v1/ai/tools/*`) — a separate auth path (AI session token
+  from `POST /restaurants/:id/sessions`, no staff JWT) and a narrower response shape than the
+  plain REST endpoints exercised above. This is the surface the voice/orchestration layer will
+  actually call, so it's the natural next manual pass once the above is confirmed.
+
 ## Commands
 
 ```bash
