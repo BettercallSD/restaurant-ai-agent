@@ -92,7 +92,7 @@ business logic exists — they're thin wrappers) → structured, minimal output 
   success, doesn't error); `COMPLETED`/`NO_SHOW` → rejected with `INVALID_RESERVATION_TRANSITION`.
 
 ## `create_order`
-- **Input**: `{ customerPhone, items: [{ menuItemId, quantity }], reservationId?, idempotencyKey }`
+- **Input**: `{ customerName?, customerPhone, items: [{ menuItemId, quantity }], reservationId?, idempotencyKey }`
 - **Logic**: looks up each `menuItemId`'s current `price_cents` and `is_available` from the
   database — **the AI never supplies a price**. Rejects if any item is unavailable or quantity is
   out of bounds (1–20, documented in validators).

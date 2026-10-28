@@ -131,8 +131,14 @@ Every item below is a deliberate scope decision, stated plainly rather than left
   proxy, if any, actually sits in front of this in a real deployment.
 - `POST /sessions` is intentionally unauthenticated (`DECISIONS.md`) — a production deployment
   would gate it behind a restaurant-specific API key for the telephony integration.
-- No dashboard staff-write endpoints yet (table/menu-item create/edit, a reservation list view) —
-  the auth mechanism exists, they're simply not built, since the agentic core was the priority.
+- No staff-write endpoints for tables/menu items yet — the auth mechanism exists, they're simply
+  not built. (The dashboard's read-only list views now exist, staff-only: an AI session token gets
+  403 on them, so one call can't list every customer's bookings.)
+- The staff dashboard keeps its JWT in `sessionStorage` (cleared when the tab closes). That's
+  readable by any script on the page, so the page relies on a strict same-origin CSP and on
+  rendering all customer text via `textContent` (verified with an `<img onerror>` payload in a
+  customer name: rendered as text, nothing executed). An httpOnly cookie would be the stronger
+  choice for a production deployment.
 - `users.is_platform_admin` is checked server-side but not wired to any route yet — no
   platform-admin endpoints exist to need it.
 - Dev-only `jest`/`braces` advisory (never in the production dependency tree) is tracked, not

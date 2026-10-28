@@ -1,9 +1,9 @@
 # Development Log
 
 ## Current phase
-Phase 17 complete (final security audit — a skeptical re-verification of `SECURITY.md`'s checklist,
-not a rubber stamp; found and fixed four real issues, detailed below). Starting Phase 18
-(end-to-end testing).
+All 18 phases complete, plus post-plan pitch prep (staff dashboard, dashboard list endpoints,
+token revocation on hangup, sample-data script). Paid pieces (telephony, STT/TTS, LLM
+orchestration) are deferred until the pitch is approved.
 
 ## Completed
 - Phase 1: Repository inspection — repo was empty (README + .gitignore only), nothing to reuse.
@@ -304,17 +304,31 @@ not a rubber stamp; found and fixed four real issues, detailed below). Starting 
   escalation path, and every Phase 17 security fix all held up identically under a live,
   end-to-end run as they did in the per-phase test suite.
 
+- Post-plan (pitch prep, free work only): the voice partner became unavailable, so the free
+  pieces of the Servora diagram were built here, with the paid ones (telephony, STT/TTS, LLM)
+  deliberately deferred until the pitch is approved.
+  - Staff-only dashboard list endpoints: `GET .../reservations`, `.../orders`, `.../sessions`
+    (`requireStaffActor`; AI session tokens get 403).
+  - Ending a session now revokes its `aiToken`. The JWT itself stays valid for 4 hours, so
+    `authenticate` checks the session is still `ACTIVE` on every AI-token request.
+  - `create_order` tool accepts an optional `customerName` (a takeaway needs a name on it; the
+    service already supported it, the tool schema just never exposed it).
+  - Staff dashboard at `/dashboard/` (plain HTML/CSS/JS, no build step): login, live stats,
+    Reservations / Orders / AI Calls tabs with transcript and tool-call trace. Verified in a real
+    browser (Playwright): login, wrong password, tab switching, date filter, call detail, reload
+    keeps the sign-in, sign-out, phone-width layout, and an XSS payload in a customer name
+    rendering as plain text. Found and fixed one bug in the process: the login card stayed
+    visible after sign-in because `display: grid` overrode the `hidden` attribute.
+  - `npm run demo:data`: fills a running server with a realistic sample day through the real API
+    (scripted transcripts, real tool calls).
+  112/112 tests passing.
+
 ## Current task
-None — Phase 18 was the last phase in the 18-phase implementation order. The backend is feature-
-and security-complete for the hackathon's scope: see `README.md`'s Status section and
-`docs/SECURITY.md`'s "Known tradeoffs" for exactly what's intentionally out of scope for v1.
+Pitch. Building the paid pieces (telephony, STT/TTS, LLM orchestration) waits on approval.
 
 ## Next task
-None owed by this plan. Any further work (dashboard staff-write endpoints, Redis-backed rate
-limiting, refresh-token rotation — see "Known tradeoffs" in `SECURITY.md`) is explicitly
-out-of-scope v1 follow-up, not a gap in the 18-phase plan. What remains for the hackathon itself —
-wiring up telephony/STT/TTS and the orchestration loop against this backend's AI tool layer — is
-the partner's side of `docs/INTEGRATION.md`, not backend work.
+If approved: the voice agent (LLM orchestration loop calling the 13 tools), then telephony via
+call forwarding from the restaurant's existing number (see `INTEGRATION.md`).
 
 ## Known issues
 - `POST /restaurants/:id/sessions` is intentionally unauthenticated (it's the credential-issuing
@@ -324,8 +338,10 @@ the partner's side of `docs/INTEGRATION.md`, not backend work.
 - Rate limiting uses express-rate-limit's in-memory store — correct for a single-instance
   deployment, but would under-count across multiple instances. A shared store (Redis) would be
   needed before horizontally scaling.
-- No dashboard staff-write endpoints yet (table/menu-item create/edit, reservation list view) —
-  the auth mechanism they need now exists, they're just not built.
+- No staff-write endpoints for tables/menu items yet — the auth mechanism they need exists,
+  they're just not built.
+- `npm run demo:data` adds a fresh set of sample data every run; run it once against a fresh
+  database before a demo rather than repeatedly.
 - Combination-seating caps at 3 tables (`MAX_COMBINED_TABLES`) and searches by brute-force
   combination enumeration — fine at hackathon scale (a handful of tables per restaurant), would
   need a smarter search for a restaurant with dozens of tables.

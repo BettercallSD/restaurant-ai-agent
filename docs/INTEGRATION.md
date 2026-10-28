@@ -3,6 +3,34 @@
 This is the contract you build against. You don't need to know the database schema — everything
 you need is the tool/API shapes below and in `AI_TOOLS.md` / `API.md`.
 
+## Connecting to the restaurant's existing phone number
+
+The restaurant keeps its number, and the receptionist keeps answering. Servora only takes the
+calls the receptionist can't, using **conditional call forwarding**, which ordinary mobile and
+landline plans support:
+
+```
+Customer dials the restaurant's usual number
+  → the receptionist's phone rings as normal
+     ├─ answered → a normal call; Servora isn't involved
+     └─ busy / not answered in ~20 s / phone switched off (e.g. after hours)
+          → the phone network forwards the call to Servora's number
+             → Servora answers, books or takes the order, and it appears on the dashboard
+             → anything it can't handle: transfer_to_human rings the manager's mobile
+```
+
+Set-up options, simplest first:
+1. **Conditional call forwarding**: the restaurant enables "forward when busy / no answer /
+   unreachable" on its existing SIM or landline, pointing at Servora's number. No new hardware.
+2. **Restaurant PBX**: for places with a switchboard, Servora is added as an extension or
+   overflow destination over SIP.
+3. **Local GSM gateway**: a device with a local SIM bridging calls to the server, for a local
+   Nepali number. Check Nepal Telecom Authority rules on VoIP gateways before using this.
+
+Open question for production: Servora's own number. Forwarding to a foreign (e.g. US) number is
+billed to the restaurant at international rates, so a real deployment needs a local Nepali
+SIP/VoIP number from a local provider.
+
 ## Voice AI → backend
 
 ```
@@ -28,12 +56,14 @@ Caller dials restaurant's number
   → on call end: the session is just left ACTIVE indefinitely by default (not a bug — there's no
     background job expiring it), or, if you have a clean hangup signal, POST
     /api/v1/restaurants/:restaurantId/sessions/:id/end { status? } ('COMPLETED' by default, or
-    'ABANDONED') so the dashboard doesn't show a finished call as still in progress
+    'ABANDONED') so the dashboard doesn't show a finished call as still in progress — this also
+    revokes the call's aiToken (any later request with it gets 401)
 ```
 
 **Important**: the `aiToken` is specific to the session it was issued for. If the same customer
 calls back later, that's a *new* session (new `POST .../sessions` call) with its own new
-`aiToken` — don't try to reuse an old one across calls.
+`aiToken` — don't try to reuse an old one across calls (once a session is ended, its token stops
+working).
 
 ## Hard rule your orchestrator must follow
 
@@ -71,6 +101,10 @@ will actually accept.
 Standard JWT-bearer REST API (`POST /auth/login`, then `Authorization: Bearer <token>` on
 everything else). Staff only see/modify their own restaurant's data — enforced server-side, not by
 what your UI chooses to display. See `API.md` for the full endpoint list.
+
+A working dashboard already ships with the backend at `/dashboard/` (reservations, orders, AI
+calls with transcript and tool trace). The list endpoints it uses
+(`GET .../reservations`, `.../orders`, `.../sessions`) are staff-only.
 
 ## Errors
 

@@ -96,6 +96,24 @@ describe('GET /restaurants/:id/orders (dashboard list)', () => {
     const res = await request(app).get(`${base()}/orders`).set('Authorization', `Bearer ${aiToken}`);
     expect(res.status).toBe(403);
   });
+
+  test('a phone order placed through the AI tool carries the customer name to the dashboard', async () => {
+    const { aiToken } = await newAiSession();
+    const placed = await request(app)
+      .post('/api/v1/ai/tools/create-order')
+      .set('Authorization', `Bearer ${aiToken}`)
+      .send({
+        customerName: 'Karki',
+        customerPhone: uniquePhone(),
+        items: [{ menuItemId: momo.id, quantity: 1 }],
+        idempotencyKey: crypto.randomUUID(),
+      });
+    expect(placed.status).toBe(200);
+
+    const res = await staff(request(app).get(`${base()}/orders`));
+    const row = res.body.orders.find((o) => o.id === placed.body.orderId);
+    expect(row.customer.name).toBe('Karki');
+  });
 });
 
 describe('GET /restaurants/:id/sessions (calls list)', () => {

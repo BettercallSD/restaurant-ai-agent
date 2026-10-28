@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const pinoHttp = require('pino-http');
 const routes = require('./routes');
@@ -26,6 +27,26 @@ app.use(express.json({ limit: '32kb' }));
 app.get('/health', (req, res) => res.json({ success: true, status: 'ok' }));
 
 app.use('/api/v1', routes);
+
+// Staff dashboard: static files only, talking to the API above with the staff JWT. The strict CSP
+// (no inline script/style, same-origin only) backs up the page's own rule of rendering customer
+// text via textContent, so a name like "<script>…" can never execute.
+const DASHBOARD_HEADERS = {
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+};
+app.use(
+  '/dashboard',
+  (req, res, next) => {
+    res.set(DASHBOARD_HEADERS);
+    next();
+  },
+  express.static(path.join(__dirname, '..', 'public', 'dashboard'))
+);
+app.get('/', (req, res) => res.redirect('/dashboard/'));
 
 // Any route that doesn't match becomes a clean 404 through the same error envelope, instead of
 // Express's default HTML error page.

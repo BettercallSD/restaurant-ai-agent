@@ -43,6 +43,9 @@ create/modify/cancel).
   `date` must be `YYYY-MM-DD`, `time` must be `HH:mm`, `partySize` 1-50).
   → 201 `{ success, reservation: { id, status, date, time, partySize, specialRequests, tables } }`,
   or 409 `RESERVATION_UNAVAILABLE` with an `alternatives` array.
+- `GET /restaurants/:restaurantId/reservations?date=YYYY-MM-DD` — **staff only** (an AI session
+  token gets 403). Dashboard list, `date` optional:
+  `{ success, reservations: [{ id, date, time, partySize, status, specialRequests, customer: { name, phone }, tables: ['T3'] }] }`
 - `GET /restaurants/:restaurantId/reservations/:reservationId`
 - `PATCH /restaurants/:restaurantId/reservations/:reservationId` — any of `{ date, time, partySize }`
 - `POST /restaurants/:restaurantId/reservations/:reservationId/cancel` — idempotent
@@ -53,6 +56,9 @@ Same auth/rate-limit model as reservations.
   Body: `{ customer: { phone, name? }, items: [{ menuItemId, quantity }], reservationId? }`
   (`menuItemId`/`reservationId` must be valid UUIDs; `quantity` 1-20).
   → 201 `{ success, order: { id, status, reservationId, items, subtotalCents, totalCents } }`
+- `GET /restaurants/:restaurantId/orders?date=YYYY-MM-DD` — **staff only**. Newest first; `date`
+  (optional) is the order's creation day in the restaurant's own timezone:
+  `{ success, orders: [{ id, reservationId, status, subtotalCents, totalCents, createdAt, customer: { name, phone }, items: [{ menuItemId, name, quantity, unitPriceCents, lineTotalCents }] }] }`
 - `GET /restaurants/:restaurantId/orders/:orderId`
 - `PATCH /restaurants/:restaurantId/orders/:orderId` — `{ items: [...] }` (full replacement, only while `PENDING`)
 - `POST /restaurants/:restaurantId/orders/:orderId/cancel` — idempotent
@@ -61,6 +67,8 @@ Same auth/rate-limit model as reservations.
 - `POST /restaurants/:restaurantId/sessions` — **no auth required** (it's the credential-issuing
   endpoint — see `DECISIONS.md`). Rate-limited (30/15min). Body: `{ customerPhone?, channel? }` →
   `{ success, session: { id, restaurantId, channel, state, status }, aiToken }`.
+- `GET /restaurants/:restaurantId/sessions` — **staff only**. The 50 most recent calls:
+  `{ success, sessions: [{ id, customerPhone, channel, state, status, startedAt, endedAt, actionCount }] }`
 - `GET /restaurants/:restaurantId/sessions/:sessionId` — requires the `aiToken` this exact session
   was issued (or a staff JWT for this restaurant); a different session's `aiToken` gets 404, not
   this session's data.
@@ -71,6 +79,7 @@ Same auth/rate-limit model as reservations.
 - `POST /restaurants/:restaurantId/sessions/:sessionId/end` — `{ status? }` (`COMPLETED` by
   default, or `ABANDONED`). Optional — an un-ended session is simply left `ACTIVE`, which is the
   documented default, not a bug; call this only when the telephony layer has a clean hangup signal.
+  Ending a session **revokes its `aiToken`**: every later request with it gets 401.
 - `GET /restaurants/:restaurantId/sessions/:sessionId/ai-actions` — the dashboard's "AI activity"
   trace: `{ success, actions: [{ id, toolName, status, durationMs, sanitizedInput, sanitizedResult, createdAt }] }`,
   in chronological order. Populated automatically by every `/ai/tools/*` call for this session.
@@ -85,10 +94,14 @@ redirect a call to a different restaurant. Rate-limited (300/15min — a single 
 can involve several tool calls). Every call is logged to `ai_actions`, success or failure. See
 `AI_TOOLS.md` for each tool's exact input/output shape.
 
+## Staff dashboard (web page)
+`GET /dashboard/` serves the staff dashboard (`public/dashboard/`), and `GET /` redirects there.
+It's static HTML/JS that signs in with `POST /auth/login` and reads the staff-only list endpoints
+above. Served with a strict same-origin Content-Security-Policy and `X-Frame-Options: DENY`.
+
 ## Not yet built
-- `GET /restaurants/:id/reservations` dashboard list view (needs no new auth — the mechanism
-  exists — just not built yet)
-- `POST`/`PATCH` on tables and menu items (staff-only; same note)
+- `POST`/`PATCH` on tables and menu items (staff-only; the auth mechanism exists, the endpoints
+  don't yet)
 
 ## Example (as implemented)
 

@@ -160,8 +160,14 @@ const cancelReservation = tool('cancel_reservation', async (req) => {
 });
 
 const createOrder = tool('create_order', async (req) => {
-  const { customerPhone, items, reservationId, idempotencyKey } = req.body;
-  const order = await orderService.createOrder(req.restaurant, { customerPhone, items, reservationId, idempotencyKey });
+  const { customerName, customerPhone, items, reservationId, idempotencyKey } = req.body;
+  const order = await orderService.createOrder(req.restaurant, {
+    customerName,
+    customerPhone,
+    items,
+    reservationId,
+    idempotencyKey,
+  });
   return { orderId: order.id, items: order.items, subtotalCents: order.subtotalCents, totalCents: order.totalCents, status: order.status };
 });
 

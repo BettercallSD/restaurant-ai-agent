@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Servora Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <div class="brand brand-lg"><span class="brand-mark">S</span> Servora</div>
+      <p class="muted">AI voice agent for hospitality. Staff sign in.</p>
+      <label>Email <input id="login-email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="login-password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="btn-primary">Sign in</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="app-view" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">S</span> Servora</div>
+      <div class="restaurant">
+        <span id="restaurant-name"></span>
+        <span id="restaurant-meta" class="muted"></span>
+      </div>
+      <div class="controls">
+        <label class="date-picker">Date <input id="date-input" type="date"></label>
+        <span id="live-indicator" class="live" title="Refreshes every 15 seconds">● Live</span>
+        <button id="refresh-btn" type="button">Refresh</button>
+        <button id="logout-btn" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><span class="stat-label">Reservations</span><span id="stat-reservations" class="stat-value">–</span></div>
+      <div class="stat"><span class="stat-label">Guests</span><span id="stat-guests" class="stat-value">–</span></div>
+      <div class="stat"><span class="stat-label">Orders</span><span id="stat-orders" class="stat-value">–</span></div>
+      <div class="stat"><span class="stat-label">Order revenue</span><span id="stat-revenue" class="stat-value">–</span></div>
+      <div class="stat"><span class="stat-label">AI calls (recent)</span><span id="stat-calls" class="stat-value">–</span></div>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="reservations" role="tab">Reservations</button>
+      <button class="tab" data-tab="orders" role="tab">Orders</button>
+      <button class="tab" data-tab="calls" role="tab">AI Calls</button>
+    </nav>
+
+    <main>
+      <section id="tab-reservations" class="tab-panel">
+        <table class="data">
+          <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th class="num">Party</th><th>Tables</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody id="reservations-body"></tbody>
+        </table>
+        <p id="reservations-empty" class="empty" hidden>No reservations for this date yet.</p>
+      </section>
+
+      <section id="tab-orders" class="tab-panel" hidden>
+        <table class="data">
+          <thead><tr><th>Placed</th><th>Name</th><th>Phone</th><th>Items</th><th class="num">Total</th><th>Status</th></tr></thead>
+          <tbody id="orders-body"></tbody>
+        </table>
+        <p id="orders-empty" class="empty" hidden>No orders for this date yet.</p>
+      </section>
+
+      <section id="tab-calls" class="tab-panel" hidden>
+        <div class="calls-layout">
+          <table class="data">
+            <thead><tr><th>Started</th><th>Caller</th><th>Status</th><th class="num">AI actions</th></tr></thead>
+            <tbody id="calls-body"></tbody>
+          </table>
+          <aside id="call-detail" class="call-detail">
+            <p class="muted">Select a call to see its transcript and every action the AI took.</p>
+          </aside>
+        </div>
+        <p id="calls-empty" class="empty" hidden>No calls yet.</p>
+      </section>
+    </main>
+    <p id="app-error" class="error banner" role="alert" hidden></p>
+  </section>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

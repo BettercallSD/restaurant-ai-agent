@@ -43,6 +43,7 @@ const modifyReservationToolSchema = z
 const cancelReservationToolSchema = z.object({ reservationId: uuid });
 
 const createOrderToolSchema = z.object({
+  customerName: z.string().trim().min(1).max(120).optional(),
   customerPhone: phone,
   items: z.array(orderItemSchema).min(1, 'An order must have at least one item.'),
   reservationId: uuid.optional(),

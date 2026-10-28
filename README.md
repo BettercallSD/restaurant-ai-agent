@@ -48,6 +48,15 @@ npm run dev                  # starts the API on PORT (default 3000), auto-resta
 
 Verify it's up: `curl http://localhost:3000/health` → `{"success":true,"status":"ok"}`.
 
+**Staff dashboard:** open `http://localhost:3000/` (redirects to `/dashboard/`) and sign in with
+`owner@himalayanbites.test` / `ChangeMe123!`. Tabs for reservations, orders, and AI calls
+(transcript plus every tool call the AI made), refreshing every 15 seconds.
+
+**Sample data for a demo:** with the server running, `npm run demo:data` fills it with a
+realistic day through the real API: phone calls (booking, Nepali/English takeaway order, a full
+slot with an alternative offered, a cancellation, a hand-off to staff) plus walk-in bookings and
+orders. The call transcripts are scripted sample data, not live AI conversations.
+
 ```bash
 npm test                    # migrates + seeds DATABASE_URL_TEST, then runs the full test suite
 ```
@@ -71,6 +80,12 @@ the Phase 16 IDOR fix and the Phase 15 idempotency-key race fix (see `docs/SECUR
 audit (Phase 17)" section). Phase 18 then ran every `docs/DEMO_SCENARIOS.md` scenario end-to-end as
 one continuous conversation against a live, freshly-seeded server (not just in isolated tests) and
 found no code defects — only a documentation gap in how `check_table_availability` describes its
-two validation layers, now fixed in `AI_TOOLS.md`. What's left is explicitly out-of-scope v1
-follow-up (see `docs/SECURITY.md`'s "Known tradeoffs"), plus the partner's side of the integration
-(telephony/STT/TTS, the orchestration loop, the dashboard UI) — see `docs/INTEGRATION.md`.
+two validation layers, now fixed in `AI_TOOLS.md`.
+
+After Phase 18: a working staff dashboard (`/dashboard/`), staff-only list endpoints for it,
+`aiToken` revocation when a call ends, and a sample-data script for demos (112 passing tests).
+
+**Not built yet (paid services):** telephony (e.g. Twilio), speech-to-text, text-to-speech, and
+the LLM orchestration loop that turns a caller's words into these tool calls. See
+`docs/INTEGRATION.md` for the contract, and `docs/SECURITY.md`'s "Known tradeoffs" for v1 scope
+limits.

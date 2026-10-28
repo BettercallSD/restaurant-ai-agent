@@ -123,6 +123,7 @@ const tools = [
     parameters: {
       type: 'object',
       properties: {
+        customerName: { type: 'string', description: 'Name to put on the order (recommended for takeaway).' },
         customerPhone: { type: 'string' },
         items: {
           type: 'array',
