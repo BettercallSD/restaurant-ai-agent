@@ -11,6 +11,7 @@ const {
   endSessionSchema,
 } = require('../validators/sessionValidators');
 const { sessionCreateLimiter } = require('../middleware/rateLimiters');
+const { requireStaffActor } = require('../middleware/requireStaffActor');
 
 const router = express.Router({ mergeParams: true });
 
@@ -18,6 +19,8 @@ const router = express.Router({ mergeParams: true });
 // below this line acts on an EXISTING session and requires the aiToken (or staff auth) this one
 // hands back.
 router.post('/', sessionCreateLimiter, validate(createSessionSchema), controller.createSession);
+
+router.get('/', authenticate, authorizeActor, requireStaffActor, controller.listSessions);
 
 router.get('/:sessionId', validateUuidParam('sessionId'), authenticate, authorizeActor, controller.getSession);
 router.patch(

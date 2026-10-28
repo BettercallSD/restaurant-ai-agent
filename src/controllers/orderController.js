@@ -1,4 +1,5 @@
 const orderService = require('../services/orderService');
+const orderRepository = require('../repositories/orderRepository');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const { validationError } = require('../errors/AppError');
 
@@ -38,4 +39,11 @@ const cancelOrder = asyncHandler(async (req, res) => {
   res.json({ success: true, order });
 });
 
-module.exports = { createOrder, getOrder, modifyOrder, cancelOrder };
+const listOrders = asyncHandler(async (req, res) => {
+  const orders = await orderRepository.listForDashboard(req.restaurant.id, req.restaurant.timezone, {
+    date: req.query.date,
+  });
+  res.json({ success: true, orders });
+});
+
+module.exports = { createOrder, getOrder, modifyOrder, cancelOrder, listOrders };

@@ -1,8 +1,12 @@
 const { z } = require('zod');
-const { uuid } = require('./common');
+const { uuid, dateStr } = require('./common');
 
 const listMenuQuerySchema = z.object({
   categoryId: uuid.optional(),
 });
 
-module.exports = { listMenuQuerySchema };
+const dashboardListQuerySchema = z.object({
+  date: dateStr.optional(),
+});
+
+module.exports = { listMenuQuerySchema, dashboardListQuerySchema };

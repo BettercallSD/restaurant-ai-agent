@@ -1,12 +1,15 @@
 const express = require('express');
 const controller = require('../controllers/orderController');
-const { validate } = require('../middleware/validate');
+const { validate, validateQuery } = require('../middleware/validate');
 const { validateUuidParam } = require('../middleware/validateParams');
+const { requireStaffActor } = require('../middleware/requireStaffActor');
 const { createOrderSchema, modifyOrderSchema } = require('../validators/orderValidators');
+const { dashboardListQuerySchema } = require('../validators/restaurantValidators');
 const { mutationLimiter } = require('../middleware/rateLimiters');
 
 const router = express.Router({ mergeParams: true });
 
+router.get('/', requireStaffActor, validateQuery(dashboardListQuerySchema), controller.listOrders);
 router.post('/', mutationLimiter, validate(createOrderSchema), controller.createOrder);
 router.get('/:orderId', validateUuidParam('orderId'), controller.getOrder);
 router.patch(

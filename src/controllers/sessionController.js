@@ -92,7 +92,13 @@ const listAiActions = asyncHandler(async (req, res) => {
   res.json({ success: true, actions });
 });
 
+const listSessions = asyncHandler(async (req, res) => {
+  const sessions = await sessionRepository.listForRestaurant(req.restaurant.id);
+  res.json({ success: true, sessions });
+});
+
 module.exports = {
+  listSessions,
   createSession,
   getSession,
   patchSessionState,

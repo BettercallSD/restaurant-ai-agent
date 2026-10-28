@@ -137,7 +137,36 @@ async function updateSchedule(id, restaurantId, { partySize, date, time, duratio
   return result.rows[0] ? mapReservation(result.rows[0]) : null;
 }
 
+/** Dashboard list: one row per reservation with customer details and assigned table labels. */
+async function listForDashboard(restaurantId, { date } = {}, executor = pool) {
+  const result = await executor.query(
+    `SELECT r.id, r.reservation_date, r.reservation_time, r.party_size, r.status, r.special_requests,
+            c.name AS customer_name, c.phone AS customer_phone,
+            COALESCE(array_agg(t.label ORDER BY t.label) FILTER (WHERE t.id IS NOT NULL), '{}') AS table_labels
+     FROM reservations r
+     JOIN customers c ON c.id = r.customer_id
+     LEFT JOIN reservation_tables rt ON rt.reservation_id = r.id
+     LEFT JOIN tables t ON t.id = rt.table_id
+     WHERE r.restaurant_id = $1 AND ($2::date IS NULL OR r.reservation_date = $2::date)
+     GROUP BY r.id, c.id
+     ORDER BY r.reservation_date ASC, r.reservation_time ASC
+     LIMIT 500`,
+    [restaurantId, date ?? null]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    date: row.reservation_date,
+    time: row.reservation_time,
+    partySize: row.party_size,
+    status: row.status,
+    specialRequests: row.special_requests,
+    customer: { name: row.customer_name, phone: row.customer_phone },
+    tables: row.table_labels,
+  }));
+}
+
 module.exports = {
+  listForDashboard,
   findOverlappingTableIds,
   insert,
   insertTables,

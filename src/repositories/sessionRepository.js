@@ -72,4 +72,27 @@ async function listMessages(sessionId, executor = pool) {
   return result.rows.map((row) => ({ role: row.role, content: row.content, createdAt: row.created_at }));
 }
 
-module.exports = { create, findById, patchState, markEnded, appendMessage, listMessages };
+/** Dashboard "calls" list, most recent first, with how many tool calls each made. */
+async function listForRestaurant(restaurantId, { limit = 50 } = {}, executor = pool) {
+  const result = await executor.query(
+    `SELECT s.id, s.customer_phone, s.channel, s.state, s.status, s.started_at, s.ended_at,
+            (SELECT count(*)::int FROM ai_actions a WHERE a.session_id = s.id) AS action_count
+     FROM conversation_sessions s
+     WHERE s.restaurant_id = $1
+     ORDER BY s.started_at DESC
+     LIMIT $2`,
+    [restaurantId, limit]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    customerPhone: row.customer_phone,
+    channel: row.channel,
+    state: row.state,
+    status: row.status,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    actionCount: row.action_count,
+  }));
+}
+
+module.exports = { create, findById, patchState, markEnded, appendMessage, listMessages, listForRestaurant };

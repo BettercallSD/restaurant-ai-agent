@@ -1,5 +1,6 @@
 const { verifyStaffToken, verifyAiSessionToken } = require('../utils/jwt');
 const userRepository = require('../repositories/userRepository');
+const sessionRepository = require('../repositories/sessionRepository');
 const { unauthorized } = require('../errors/AppError');
 const { asyncHandler } = require('./asyncHandler');
 
@@ -19,12 +20,22 @@ const authenticate = asyncHandler(async (req, res, next) => {
     throw unauthorized('Missing or malformed Authorization header.');
   }
 
+  let aiPayload = null;
   try {
-    const payload = verifyAiSessionToken(token);
-    req.actor = { type: 'ai', sessionId: payload.sessionId, restaurantId: payload.restaurantId };
-    return next();
+    aiPayload = verifyAiSessionToken(token);
   } catch {
     // Not an AI session token (or it's expired/invalid) — fall through and try staff auth below.
+  }
+
+  if (aiPayload) {
+    // The JWT alone stays valid for hours; ending the call has to actually revoke it, so a token
+    // only works while its session is still ACTIVE.
+    const session = await sessionRepository.findById(aiPayload.sessionId);
+    if (!session || session.status !== 'ACTIVE' || session.restaurantId !== aiPayload.restaurantId) {
+      throw unauthorized('Invalid or expired token.');
+    }
+    req.actor = { type: 'ai', sessionId: aiPayload.sessionId, restaurantId: aiPayload.restaurantId };
+    return next();
   }
 
   let staffPayload;

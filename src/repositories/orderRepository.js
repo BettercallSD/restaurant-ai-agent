@@ -105,7 +105,57 @@ async function updateTotals(id, restaurantId, { subtotalCents, totalCents }, cli
   return result.rows[0] ? mapOrder(result.rows[0]) : null;
 }
 
+/**
+ * Dashboard list, newest first. `date` is matched against the order's creation day in the
+ * restaurant's own timezone, so "today's orders" means the restaurant's today, not UTC's.
+ */
+async function listForDashboard(restaurantId, timezone, { date } = {}, executor = pool) {
+  const orders = await executor.query(
+    `SELECT o.id, o.reservation_id, o.status, o.subtotal_cents, o.total_cents, o.created_at,
+            c.name AS customer_name, c.phone AS customer_phone
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     WHERE o.restaurant_id = $1
+       AND ($2::date IS NULL OR (o.created_at AT TIME ZONE $3)::date = $2::date)
+     ORDER BY o.created_at DESC
+     LIMIT 500`,
+    [restaurantId, date ?? null, timezone]
+  );
+  if (orders.rows.length === 0) return [];
+
+  const items = await executor.query(
+    `SELECT oi.order_id, oi.menu_item_id, mi.name, oi.quantity, oi.unit_price_cents, oi.line_total_cents
+     FROM order_items oi
+     JOIN menu_items mi ON mi.id = oi.menu_item_id
+     WHERE oi.order_id = ANY($1::uuid[])`,
+    [orders.rows.map((row) => row.id)]
+  );
+  const itemsByOrder = new Map();
+  for (const row of items.rows) {
+    if (!itemsByOrder.has(row.order_id)) itemsByOrder.set(row.order_id, []);
+    itemsByOrder.get(row.order_id).push({
+      menuItemId: row.menu_item_id,
+      name: row.name,
+      quantity: row.quantity,
+      unitPriceCents: row.unit_price_cents,
+      lineTotalCents: row.line_total_cents,
+    });
+  }
+
+  return orders.rows.map((row) => ({
+    id: row.id,
+    reservationId: row.reservation_id,
+    status: row.status,
+    subtotalCents: row.subtotal_cents,
+    totalCents: row.total_cents,
+    createdAt: row.created_at,
+    customer: { name: row.customer_name, phone: row.customer_phone },
+    items: itemsByOrder.get(row.id) ?? [],
+  }));
+}
+
 module.exports = {
+  listForDashboard,
   insert,
   insertItems,
   clearItems,

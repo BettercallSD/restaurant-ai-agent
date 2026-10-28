@@ -1,4 +1,5 @@
 const reservationService = require('../services/reservationService');
+const reservationRepository = require('../repositories/reservationRepository');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const { validationError } = require('../errors/AppError');
 
@@ -48,4 +49,9 @@ const cancelReservation = asyncHandler(async (req, res) => {
   res.json({ success: true, reservation });
 });
 
-module.exports = { createReservation, getReservation, modifyReservation, cancelReservation };
+const listReservations = asyncHandler(async (req, res) => {
+  const reservations = await reservationRepository.listForDashboard(req.restaurant.id, { date: req.query.date });
+  res.json({ success: true, reservations });
+});
+
+module.exports = { createReservation, getReservation, modifyReservation, cancelReservation, listReservations };
