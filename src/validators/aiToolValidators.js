@@ -1,6 +1,6 @@
 const { z } = require('zod');
 const { uuid, phone, dateStr, timeStr } = require('./common');
-const { orderItemSchema } = require('./orderValidators');
+const { orderItems } = require('./orderValidators');
 
 const partySize = z.number().int().min(1).max(50);
 // The AI has no HTTP-header concept the way a REST client does, so idempotencyKey is a normal
@@ -45,14 +45,14 @@ const cancelReservationToolSchema = z.object({ reservationId: uuid });
 const createOrderToolSchema = z.object({
   customerName: z.string().trim().min(1).max(120).optional(),
   customerPhone: phone,
-  items: z.array(orderItemSchema).min(1, 'An order must have at least one item.'),
+  items: orderItems,
   reservationId: uuid.optional(),
   idempotencyKey,
 });
 
 const modifyOrderToolSchema = z.object({
   orderId: uuid,
-  items: z.array(orderItemSchema).min(1, 'An order must have at least one item.'),
+  items: orderItems,
 });
 
 const cancelOrderToolSchema = z.object({ orderId: uuid });

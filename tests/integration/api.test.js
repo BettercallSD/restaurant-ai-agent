@@ -398,6 +398,43 @@ describe('session routes', () => {
   });
 });
 
+describe('malformed and oversized request bodies', () => {
+  test('invalid JSON is a 400, not a 500', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"email": broken');
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, error: { code: 'VALIDATION_ERROR' } });
+  });
+
+  test('a body over the 32kb limit is a 413, not a 500', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ padding: 'x'.repeat(40000) }));
+    expect(res.status).toBe(413);
+    expect(res.body).toMatchObject({ success: false, error: { code: 'PAYLOAD_TOO_LARGE' } });
+  });
+
+  test('a huge array of invalid items gets a short error, not one message per item', async () => {
+    const res = await auth(request(app).post(`/api/v1/restaurants/${restaurant.id}/orders`))
+      .set('Idempotency-Key', `oversize-${Date.now()}`)
+      .send({ customer: { phone: uniquePhone('ov') }, items: new Array(15000).fill(1) });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message.length).toBeLessThan(1000);
+  });
+
+  test('an order with more than 50 different lines is rejected', async () => {
+    const items = Array.from({ length: 51 }, () => ({ menuItemId: momo.id, quantity: 1 }));
+    const res = await auth(request(app).post(`/api/v1/restaurants/${restaurant.id}/orders`))
+      .set('Idempotency-Key', `too-many-lines-${Date.now()}`)
+      .send({ customer: { phone: uniquePhone('ml') }, items });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/at most 50/);
+  });
+});
+
 describe('unmatched routes', () => {
   test('return a 404 through the standard error envelope', async () => {
     const res = await request(app).get('/api/v1/this-route-does-not-exist');

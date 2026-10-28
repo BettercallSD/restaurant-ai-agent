@@ -83,7 +83,8 @@ found no code defects — only a documentation gap in how `check_table_availabil
 two validation layers, now fixed in `AI_TOOLS.md`.
 
 After Phase 18: a working staff dashboard (`/dashboard/`), staff-only list endpoints for it,
-`aiToken` revocation when a call ends, and a sample-data script for demos (112 passing tests).
+`aiToken` revocation when a call ends, a sample-data script for demos, and a dependency re-audit
+(116 passing tests).
 
 **Not built yet (paid services):** telephony (e.g. Twilio), speech-to-text, text-to-speech, and
 the LLM orchestration loop that turns a caller's words into these tool calls. See

@@ -42,12 +42,13 @@ formats error responses; route/controller code throws a typed `AppError` (see
 |---|---|
 | 200 | successful read/update |
 | 201 | resource created |
-| 400 | malformed request (bad JSON, missing required field shape) |
+| 400 | malformed request (bad JSON, missing required field shape, out-of-range value) |
 | 401 | missing/invalid authentication |
 | 403 | authenticated but not authorized for this resource (tenant mismatch, role) |
 | 404 | resource not found (or deliberately hidden — see IDOR note below) |
 | 409 | conflict (double-booking race lost, invalid state transition) |
-| 422 | well-formed but semantically invalid (e.g. party size 0, player not U23-eligible) |
+| 413 | request body over the 32kb limit |
+| 422 | well-formed but can't be fulfilled as asked (ordering a menu item that's currently unavailable) |
 | 429 | rate limited |
 | 500 | unexpected server error (logged internally, generic message externally) |
 
@@ -63,7 +64,8 @@ a 403 that would confirm existence-but-wrong-tenant. Where the caller is clearly
 
 | code | meaning |
 |---|---|
-| `VALIDATION_ERROR` | zod validation failed; `message` summarizes the first failure |
+| `VALIDATION_ERROR` | zod validation failed, or the body isn't valid JSON; `message` lists the first 5 problems (then "+N more") |
+| `PAYLOAD_TOO_LARGE` | request body over the 32kb limit (413) |
 | `RESERVATION_UNAVAILABLE` | no table/combination available at requested time |
 | `INVALID_RESERVATION_TRANSITION` | e.g. attempting CANCELLED → CONFIRMED |
 | `INVALID_ORDER_TRANSITION` | e.g. attempting to cancel a PREPARING order |

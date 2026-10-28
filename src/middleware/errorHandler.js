@@ -18,6 +18,21 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
     });
   }
 
+  // express.json() rejects bodies that are too large or not valid JSON. Those are the client's
+  // mistake, not a server fault, so they get a 4xx instead of the generic 500 below.
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      success: false,
+      error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large.' },
+    });
+  }
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'Request body is not valid JSON.' },
+    });
+  }
+
   // `req.log` (set by pino-http in app.js) is already bound to this request's id, so the line
   // below is automatically correlated with the access-log line for the same request — no manual
   // request-id plumbing needed. Falls back to the shared logger for the rare case this handler

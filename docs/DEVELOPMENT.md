@@ -321,7 +321,12 @@ orchestration) are deferred until the pitch is approved.
     visible after sign-in because `display: grid` overrode the `hidden` attribute.
   - `npm run demo:data`: fills a running server with a realistic sample day through the real API
     (scripted transcripts, real tool calls).
-  112/112 tests passing.
+  - Dependency re-audit (new advisories since Phase 17): `body-parser`/`qs` fixed via
+    `npm audit fix`; `zod` mitigated and its v4 upgrade deferred (see `SECURITY.md`). Probing the
+    zod issue found three bugs of our own, all fixed: a 32kb invalid request produced a ~740kb
+    error response (now first 5 issues only), and invalid JSON / oversized bodies returned 500
+    instead of 400/413. Order item arrays are now capped at 50 lines.
+  116/116 tests passing.
 
 ## Current task
 Pitch. Building the paid pieces (telephony, STT/TTS, LLM orchestration) waits on approval.

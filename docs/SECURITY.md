@@ -79,6 +79,23 @@ and the available fix requires `jest@30`, a breaking major version bump. Accepte
 tracked v1 risk rather than destabilizing the test runner under hackathon time pressure; re-checked
 in the Phase 17 final audit before declaring the backend complete.
 
+### Re-audit after Phase 18 (new advisories published since Phase 17)
+
+`npm audit --omit=dev` went from 0 to 3 advisories, all published after the Phase 17 audit:
+- `body-parser` (high, DoS) and `qs` (moderate, DoS), both pulled in by Express: **fixed** with
+  `npm audit fix` (lockfile-only, no code changes; 116/116 tests pass).
+- `zod <4.6.6` (high): an unbounded array that fails validation item by item collects one issue
+  per item, which can exhaust memory. The only fix is zod 4, a breaking major upgrade of the
+  validation layer, so it is **deferred and mitigated** rather than rushed:
+  - `express.json` already rejects bodies over 32kb, so the largest attack array is ~16k items.
+    Measured worst case: ~5MB of heap for ~35ms per request, bounded and covered by rate limits.
+  - Order item arrays are now capped at 50 lines.
+  - Measuring this found a real bug of our own: the error message listed every issue, so one
+    32kb request produced a ~740kb response. Validation errors now list the first 5 issues only.
+    The same probe found invalid JSON and oversized bodies returning 500 instead of 400/413; fixed
+    in `errorHandler.js`.
+  - Upgrade to zod 4 before any production launch.
+
 ## Final audit (Phase 17)
 
 - [x] No SQL string concatenation (re-swept with a repo-wide grep for template-literal/concat SQL

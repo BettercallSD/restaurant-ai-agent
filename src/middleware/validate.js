@@ -1,5 +1,19 @@
 const { validationError } = require('../errors/AppError');
 
+// A 32kb body can hold a ~16k-element array that fails item by item; listing every issue turned
+// one 32kb request into a ~740kb error response. The first few are all a client needs.
+const MAX_REPORTED_ISSUES = 5;
+
+function summarizeIssues(error, rootLabel) {
+  const { issues } = error;
+  const shown = issues
+    .slice(0, MAX_REPORTED_ISSUES)
+    .map((issue) => `${issue.path.join('.') || rootLabel}: ${issue.message}`)
+    .join('; ');
+  const hidden = issues.length - MAX_REPORTED_ISSUES;
+  return hidden > 0 ? `${shown}; (+${hidden} more)` : shown;
+}
+
 /**
  * Parses `req.body` against a zod schema and replaces it with the parsed (and type-coerced where
  * the schema says so) result, so controllers can trust the shape completely — no more ad hoc
@@ -10,12 +24,7 @@ const { validationError } = require('../errors/AppError');
  */
 const validate = (schema) => (req, res, next) => {
   const result = schema.safeParse(req.body);
-  if (!result.success) {
-    const message = result.error.issues
-      .map((issue) => `${issue.path.join('.') || '(body)'}: ${issue.message}`)
-      .join('; ');
-    return next(validationError(message));
-  }
+  if (!result.success) return next(validationError(summarizeIssues(result.error, '(body)')));
   req.body = result.data;
   next();
 };
@@ -28,12 +37,7 @@ const validate = (schema) => (req, res, next) => {
  */
 const validateQuery = (schema) => (req, res, next) => {
   const result = schema.safeParse(req.query);
-  if (!result.success) {
-    const message = result.error.issues
-      .map((issue) => `${issue.path.join('.') || '(query)'}: ${issue.message}`)
-      .join('; ');
-    return next(validationError(message));
-  }
+  if (!result.success) return next(validationError(summarizeIssues(result.error, '(query)')));
   req.query = result.data;
   next();
 };
